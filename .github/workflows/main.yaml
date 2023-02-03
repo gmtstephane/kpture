@@ -1,0 +1,39 @@
+name: "Integration testing in Kind"
+on: [pull_request, push]
+
+jobs:
+  kind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          path: "kpture"
+      - run: mkdir -p /home/
+      - run: cp -rf kpture /home/
+      - uses: actions/setup-go@v3
+        with:
+            go-version: 1.18
+      # - run: apt update -y && apt-get install -y libpcap-dev
+      - run: go build -v ./...
+        working-directory: /home/kpture
+      - uses: GoTestTools/gotestfmt-action@v2
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.4.0
+        env: 
+          KUBECONFIG: /tmp/kubeconfig
+      - name: Testing
+        env: 
+          KUBECONFIG: /tmp/kubeconfig
+        run: |
+          kubectl get nodes
+          kubectl apply -f test/e2e/pod.yaml 
+          kubectl wait pods podsample -n default --for condition=Ready
+          kubectl wait pods podsample-integration -n default --for condition=Ready
+          kubectl config set-context --current --namespace=default
+      - run: |
+          go test -json -timeout 30s ./pkg/kpture -kubeconfig=/tmp/kubeconfig -interface=eth0 | gotestfmt
+          go test -json -timeout 30s ./test/e2e/... -kubeconfig=/tmp/kubeconfig  | gotestfmt
+        env: 
+          CI: true
