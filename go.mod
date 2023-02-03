@@ -1,4 +1,4 @@
-module github.com/gmtStephane/kpture
+module github.com/gmtstephane/kpture
 
 go 1.18
 

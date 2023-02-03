@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gmtStephane/kpture/pkg/kpture"
+	"github.com/gmtstephane/kpture/pkg/kpture"
 
 	"github.com/stretchr/testify/assert"
 )

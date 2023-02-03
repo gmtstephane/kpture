@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/gmtStephane/kpture/api/capture"
+	"github.com/gmtstephane/kpture/api/capture"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"

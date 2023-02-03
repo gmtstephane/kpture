@@ -5,8 +5,8 @@ import (
 	"log"
 	"net"
 
-	"github.com/gmtStephane/kpture/api/capture"
-	"github.com/gmtStephane/kpture/pkg/kpture"
+	"github.com/gmtstephane/kpture/api/capture"
+	"github.com/gmtstephane/kpture/pkg/kpture"
 
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
