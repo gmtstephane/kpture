@@ -6,9 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/gmtstephane/kpture/pkg/kpture"
-
 	nested "github.com/antonfisher/nested-logrus-formatter"
+	"github.com/gmtstephane/kpture/pkg/kpture"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

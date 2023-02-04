@@ -1,5 +1,0 @@
-from --platform=arm64 golang:1.18 as builder
-
-COPY . /home/kpture
-WORKDIR /home/kpture
-RUN go build .
