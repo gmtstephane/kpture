@@ -28,7 +28,7 @@ jobs:
           kubectl wait pods podsample-integration -n default --for condition=Ready
           kubectl config set-context --current --namespace=default
       - run: |
-          go test -json -timeout 30s ./pkg/kpture -kubeconfig=/tmp/kubeconfig -interface=eth0 | gotestfmt
+          go test -json -timeout 30s ./pkg/kpture -kubeconfig=/tmp/kubeconfig  | gotestfmt
           go test -json -timeout 30s ./test/e2e/... -kubeconfig=/tmp/kubeconfig  | gotestfmt
         env: 
           CI: true
