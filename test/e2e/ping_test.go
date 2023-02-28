@@ -22,7 +22,7 @@ func (cw *customWriter) Write(p []byte) (int, error) {
 	return 0, nil
 }
 
-func TestInvalidEnvParamError_Error(t *testing.T) {
+func TestE2e(t *testing.T) {
 	flag.Parse()
 	t.Setenv("KUBECONFIG", *kubeconfig)
 
