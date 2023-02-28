@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: agent
+  labels:
+    name: agent
+spec:
+  containers:
+  - name: agent
+    image: docker.io/gmtstephane/agent:latest"
