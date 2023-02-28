@@ -6,9 +6,9 @@ package mocks
 
 import (
 	context "context"
-	capture "github.com/gmtstephane/kpture/api/capture"
 	reflect "reflect"
 
+	capture "github.com/gmtstephane/kpture/api/capture"
 	gomock "github.com/golang/mock/gomock"
 	grpc "google.golang.org/grpc"
 	metadata "google.golang.org/grpc/metadata"

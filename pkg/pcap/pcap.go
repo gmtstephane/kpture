@@ -1,4 +1,4 @@
-package kpture
+package pcap
 
 import (
 	"context"
@@ -13,27 +13,35 @@ import (
 	"google.golang.org/grpc/stats"
 )
 
+const (
+	defaultSnapLen     uint32 = 1500
+	defaultPromiscuous bool   = true
+	defaultDevice      string = "eth0"
+	defaultTimeout     int    = -1
+	defaultPort        int    = 10000
+)
+
 type Server struct {
-	options ServerOptions
+	options Options
 	packets chan gopacket.Packet
 	handle  *pcap.Handle
 	capture.UnimplementedKptureServer
 }
 
-func NewCaptureServer(os ...ServerOption) (*Server, error) {
+func NewCaptureServer(os ...Option) (*Server, error) {
 	var err error
-	opts := loadOptions(os...)
+	opts := LoadOptions(os...)
 
 	s := Server{
 		options: opts,
 	}
 	logrus.Info(opts)
-	s.handle, err = pcap.OpenLive(s.options.device, s.options.snapshotLen, s.options.promiscuous, s.options.timeout)
+	s.handle, err = pcap.OpenLive(s.options.Device, s.options.SnapshotLen, s.options.Promiscuous, s.options.Timeout)
 	if err != nil {
 		logrus.Error(err)
 		return nil, err
 	}
-	if errBPFFilter := s.handle.SetBPFFilter(fmt.Sprintf("port not %d", s.options.port)); errBPFFilter != nil {
+	if errBPFFilter := s.handle.SetBPFFilter(fmt.Sprintf("port not %d", s.options.Port)); errBPFFilter != nil {
 		logrus.Error(err)
 		return nil, err
 	}
@@ -45,7 +53,7 @@ func NewCaptureServer(os ...ServerOption) (*Server, error) {
 }
 
 func (s *Server) Port() int {
-	return s.options.port
+	return s.options.Port
 }
 
 func (s *Server) PacketsStream(in *capture.Empty, stream capture.Kpture_PacketsStreamServer) error {

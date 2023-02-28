@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gmtstephane/kpture/api/capture"
+	"github.com/gmtstephane/kpture/pkg/pcap"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -19,7 +20,7 @@ func TestNewKpture(t *testing.T) {
 	flag.Parse()
 	t.Setenv("KUBECONFIG", *kubeconfig)
 
-	client, err := GetClient()
+	client, err := GetClient("")
 	assert.Nil(t, err)
 
 	t.Run("test pod not found ", func(t *testing.T) {
@@ -45,7 +46,7 @@ func TestKpture_handleErr(t *testing.T) {
 	t.Run("handle error", func(t *testing.T) {
 		k := &Kpture{
 			client:     nil,
-			packetChan: make(chan *capture.Packet),
+			packetChan: make(chan *PacketCapture, defaultPacketChanSize),
 			errChan:    make(chan error, 1),
 			kpturePods: []*Pod{},
 		}
@@ -62,10 +63,10 @@ func TestKpture_SetupEphemeralContainers(t *testing.T) {
 	// generate random port for test
 	rand.Seed(time.Now().UnixNano())
 	port := rand.Intn(30000) + 1024
-	client, err := GetClient()
+	client, err := GetClient("")
 	assert.Nil(t, err)
 	t.Run("setup ephemeral container", func(t *testing.T) {
-		k, errNewKpture := NewKpture(client, []PodDescriptor{{Name: "podsample"}}, WithPort(port))
+		k, errNewKpture := NewKpture(client, []PodDescriptor{{Name: "podsample"}}, pcap.WithPort(port))
 		assert.Nil(t, errNewKpture)
 		errSetupContainer := k.SetupEphemeralContainers()
 		assert.Nil(t, errSetupContainer)
@@ -76,7 +77,7 @@ func TestKpture_SetupPortForwarding(t *testing.T) {
 	flag.Parse()
 	t.Setenv("KUBECONFIG", *kubeconfig)
 
-	client, err := GetClient()
+	client, err := GetClient("")
 	assert.Nil(t, err)
 
 	t.Run("port forward", func(t *testing.T) {
@@ -92,7 +93,7 @@ func TestKpture_ReadPacketsConn(t *testing.T) {
 	flag.Parse()
 	t.Setenv("KUBECONFIG", *kubeconfig)
 
-	client, err := GetClient()
+	client, err := GetClient("")
 	assert.Nil(t, err)
 
 	k, errNewKpture := NewKpture(client, []PodDescriptor{{Name: "podsample", Namespace: "default"}})
@@ -109,7 +110,7 @@ func TestKpture_HandlePackets(t *testing.T) {
 	flag.Parse()
 	t.Setenv("KUBECONFIG", *kubeconfig)
 
-	client, err := GetClient()
+	client, err := GetClient("")
 	assert.Nil(t, err)
 
 	k, errNewKpture := NewKpture(client, []PodDescriptor{{Name: "podsample", Namespace: "default"}})
@@ -120,7 +121,9 @@ func TestKpture_HandlePackets(t *testing.T) {
 			errHandlePackets := k.HandlePackets(io.Discard)
 			assert.Nil(t, errHandlePackets)
 		}()
-		k.packetChan <- &capture.Packet{}
+		k.packetChan <- &PacketCapture{
+			Packet: &capture.Packet{},
+		}
 		close(k.packetChan)
 	})
 }

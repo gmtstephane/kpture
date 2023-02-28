@@ -1,7 +1,5 @@
-package kpture
+package pcap
 
-//go:generate mkdir -p mocks
-//go:generate mockgen -source=../../api/capture/capture_grpc.pb.go  -package=mocks -destination=mocks/capture_grpc.pb_mocks.go
 import (
 	"context"
 	"errors"
@@ -39,7 +37,7 @@ func TestNewCaptureServer(t *testing.T) {
 	}
 	flag.Parse()
 	type args struct {
-		os []ServerOption
+		os []Option
 	}
 	tests := []struct {
 		name    string
@@ -49,7 +47,7 @@ func TestNewCaptureServer(t *testing.T) {
 		{
 			name: "test",
 			args: args{
-				os: []ServerOption{
+				os: []Option{
 					WithPort(8888),
 					WithInterface(*interfaceName),
 					WithSnapLen(1500),
@@ -69,10 +67,10 @@ func TestNewCaptureServer(t *testing.T) {
 			}
 			assert.NotNil(t, got)
 			assert.Equal(t, got.Port(), 8888)
-			assert.Equal(t, got.options.device, *interfaceName)
-			assert.Equal(t, got.options.snapshotLen, int32(1500))
-			assert.Equal(t, got.options.promiscuous, true)
-			assert.Equal(t, got.options.timeout, 5*time.Second)
+			assert.Equal(t, got.options.Device, *interfaceName)
+			assert.Equal(t, got.options.SnapshotLen, int32(1500))
+			assert.Equal(t, got.options.Promiscuous, true)
+			assert.Equal(t, got.options.Timeout, 5*time.Second)
 			assert.NotNil(t, got.handle)
 			assert.NotNil(t, got.packets)
 		})
@@ -81,7 +79,7 @@ func TestNewCaptureServer(t *testing.T) {
 
 func TestServer_Port(t *testing.T) {
 	type fields struct {
-		options                   ServerOptions
+		options                   Options
 		packets                   chan gopacket.Packet
 		handle                    *pcap.Handle
 		UnimplementedKptureServer capture.UnimplementedKptureServer
@@ -94,8 +92,8 @@ func TestServer_Port(t *testing.T) {
 		{
 			name: "valid port",
 			fields: fields{
-				options: ServerOptions{
-					port: 8888,
+				options: Options{
+					Port: 8888,
 				},
 			},
 			want: 8888,
@@ -123,8 +121,8 @@ func TestServer_PacketsStream(t *testing.T) {
 		packetch := make(chan gopacket.Packet)
 		s := &Server{
 			packets: packetch,
-			options: ServerOptions{
-				port: 8888,
+			options: Options{
+				Port: 8888,
 			},
 		}
 		mockServer.EXPECT().Send(gomock.Any()).DoAndReturn(
@@ -149,8 +147,8 @@ func TestServer_PacketsStream(t *testing.T) {
 		packetch := make(chan gopacket.Packet)
 		s := &Server{
 			packets: packetch,
-			options: ServerOptions{
-				port: 8888,
+			options: Options{
+				Port: 8888,
 			},
 		}
 		mockServer.EXPECT().Send(gomock.Any()).DoAndReturn(

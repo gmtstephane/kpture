@@ -26,7 +26,7 @@ func TestInvalidEnvParamError_Error(t *testing.T) {
 	flag.Parse()
 	t.Setenv("KUBECONFIG", *kubeconfig)
 
-	client, err := kpture.GetClient()
+	client, err := kpture.GetClient("")
 	assert.Nil(t, err)
 
 	podList := []kpture.PodDescriptor{{Name: "podsample-integration", Namespace: "default"}}

@@ -3,9 +3,12 @@ package kpture
 import (
 	"context"
 	"io"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gmtstephane/kpture/api/capture"
+	"github.com/gmtstephane/kpture/pkg/pcap"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -15,32 +18,31 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const (
-	defaultPacketChanSize uint32 = 1500
-	defaultSnapLen        uint32 = 1500
-	defaultPromiscuous    bool   = true
-	defaultDevice         string = "eth0"
-	defaultTimeout        int    = -1
-	defaultPort           int    = 10000
-)
-
 type PodDescriptor struct {
 	Name      string
 	Namespace string
 }
 
-type Kpture struct {
-	client     *KubeClient
-	packetChan chan *capture.Packet
-	errChan    chan error
-	kpturePods []*Pod
+const defaultPacketChanSize uint32 = 1500
+
+type PacketCapture struct {
+	*capture.Packet
+	Pod string
 }
 
-func NewKpture(client *KubeClient, pods []PodDescriptor, opts ...ServerOption) (*Kpture, error) {
+type Kpture struct {
+	client     *KubeClient
+	packetChan chan *PacketCapture
+	errChan    chan error
+	kpturePods []*Pod
+	opts       pcap.Options
+}
+
+func NewKpture(client *KubeClient, pods []PodDescriptor, opts ...pcap.Option) (*Kpture, error) {
 	var err error
 	k := &Kpture{
 		client:     client,
-		packetChan: make(chan *capture.Packet, defaultPacketChanSize),
+		packetChan: make(chan *PacketCapture, defaultPacketChanSize),
 		errChan:    make(chan error),
 		kpturePods: []*Pod{},
 	}
@@ -50,15 +52,21 @@ func NewKpture(client *KubeClient, pods []PodDescriptor, opts ...ServerOption) (
 		logrus.Error(err)
 		return nil, err
 	}
-	options := loadOptions(opts...)
+	k.opts = pcap.LoadOptions(opts...)
 	for _, pod := range pods {
-		_, errGetPod := client.Clientset.Get(context.Background(), pod.Name, v1.GetOptions{})
+		pod, errGetPod := client.Clientset.Get(context.Background(), pod.Name, v1.GetOptions{})
 		if errGetPod != nil {
 			logrus.Error(errGetPod)
 			return nil, errGetPod
 		}
+		for _, eph := range pod.Status.EphemeralContainerStatuses {
+			if strings.Contains("kpture", eph.Name) && eph.State.Running != nil {
+				logrus.Error("kpture already running on pod ", pod.Name)
+				return nil, err
+			}
+		}
 
-		kpturePod, errcapturePod := NewKpturePod(pod.Name, pod.Namespace, id.String(), options, k.errChan)
+		kpturePod, errcapturePod := NewKpturePod(pod.Name, pod.Namespace, id.String(), k.opts, k.errChan)
 		if errcapturePod != nil {
 			logrus.Error(errcapturePod)
 			return nil, errcapturePod
@@ -111,13 +119,45 @@ func (k *Kpture) Stop() {
 
 func (k *Kpture) HandlePackets(out io.Writer) error {
 	pcapwriter := pcapgo.NewWriter(out)
-	err := pcapwriter.WriteFileHeader(defaultSnapLen, layers.LinkTypeEthernet)
+
+	err := pcapwriter.WriteFileHeader(uint32(k.opts.SnapshotLen), layers.LinkTypeEthernet)
 	if err != nil {
 		return err
 	}
 
 	for packet := range k.packetChan {
 		err = pcapwriter.WritePacket(gopacket.CaptureInfo{
+			Timestamp:      time.Now(),
+			CaptureLength:  int(packet.GetCaptureInfo().GetCaptureLength()),
+			Length:         int(packet.GetCaptureInfo().GetLength()),
+			InterfaceIndex: int(packet.GetCaptureInfo().GetInterfaceIndex()),
+		}, packet.GetData())
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (k *Kpture) HandlePacketsMultipleOutput(dest string) error {
+	writers := map[string]*pcapgo.Writer{}
+
+	for _, pod := range k.kpturePods {
+		f, err := os.OpenFile(pod.name+".pcap", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+		if err != nil {
+			logrus.Error(err)
+			return err
+		}
+		defer f.Close()
+		writers[pod.name] = pcapgo.NewWriter(f)
+		err = writers[pod.name].WriteFileHeader(uint32(k.opts.SnapshotLen), layers.LinkTypeEthernet)
+		if err != nil {
+			return err
+		}
+	}
+	// pcapwriter := pcapgo.NewWriter(out)
+	for packet := range k.packetChan {
+		err := writers[packet.Pod].WritePacket(gopacket.CaptureInfo{
 			Timestamp:      time.Now(),
 			CaptureLength:  int(packet.GetCaptureInfo().GetCaptureLength()),
 			Length:         int(packet.GetCaptureInfo().GetLength()),

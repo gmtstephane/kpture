@@ -1,12 +1,15 @@
 package kpture
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/gmtstephane/kpture/pkg/pcap"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -20,7 +23,7 @@ type KubeClient struct {
 	Namespace string
 }
 
-func GetClient() (*KubeClient, error) {
+func GetClient(namespace string) (*KubeClient, error) {
 	configFiles := strings.Split(os.Getenv("KUBECONFIG"), ":")
 	config := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		&clientcmd.ClientConfigLoadingRules{Precedence: configFiles},
@@ -40,35 +43,64 @@ func GetClient() (*KubeClient, error) {
 	if err != nil {
 		return nil, errors.WithMessage(err, "could not create clientset")
 	}
-
-	ns := rawConf.Contexts[rawConf.CurrentContext].Namespace
+	if namespace == "" {
+		namespace = rawConf.Contexts[rawConf.CurrentContext].Namespace
+	}
 	return &KubeClient{
-		Namespace: ns,
-		Clientset: clientset.CoreV1().Pods(ns),
+		Namespace: namespace,
+		Clientset: clientset.CoreV1().Pods(namespace),
 		RestConf:  restconf,
 	}, nil
 }
 
-func generateDebugContainer(pod *corev1.Pod, name string, opts ServerOptions) *corev1.Pod {
+func (k *KubeClient) SelectPods(pods []string, all bool) ([]PodDescriptor, error) {
+	podDescriptors := []PodDescriptor{}
+	if all {
+		pods, err := k.Clientset.List(context.Background(), v1.ListOptions{})
+		if err != nil {
+			return nil, err
+		}
+		for _, pod := range pods.Items {
+			podDescriptors = append(podDescriptors, PodDescriptor{
+				Name:      pod.Name,
+				Namespace: pod.Namespace,
+			})
+		}
+		return podDescriptors, nil
+	}
+	for _, pod := range pods {
+		kpod, err := k.Clientset.Get(context.Background(), pod, v1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		podDescriptors = append(podDescriptors, PodDescriptor{
+			Name:      kpod.Name,
+			Namespace: kpod.Namespace,
+		})
+	}
+	return podDescriptors, nil
+}
+
+func generateDebugContainer(pod *corev1.Pod, name string, opts pcap.Options) *corev1.Pod {
 	ec := &corev1.EphemeralContainer{
 		EphemeralContainerCommon: corev1.EphemeralContainerCommon{
 			Name: name,
 			Env: []corev1.EnvVar{
 				{
 					Name:  "Kpture_PORT",
-					Value: fmt.Sprintf("%d", opts.port),
+					Value: fmt.Sprintf("%d", opts.Port),
 				}, {
 					Name:  "Kpture_DEVICE",
-					Value: opts.device,
+					Value: opts.Device,
 				}, {
 					Name:  "Kpture_SNAPSHOT_LEN",
-					Value: fmt.Sprintf("%d", opts.snapshotLen),
+					Value: fmt.Sprintf("%d", opts.SnapshotLen),
 				}, {
 					Name:  "Kpture_PROMISCUOUS",
-					Value: fmt.Sprintf("%t", opts.promiscuous),
+					Value: fmt.Sprintf("%t", opts.Promiscuous),
 				}, {
 					Name:  "Kpture_TIMEOUT",
-					Value: fmt.Sprintf("%d", opts.timeout),
+					Value: fmt.Sprintf("%d", opts.Timeout),
 				},
 			},
 			Image:                    "docker.io/gmtstephane/agent:latest",

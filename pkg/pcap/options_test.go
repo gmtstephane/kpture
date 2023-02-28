@@ -1,4 +1,4 @@
-package kpture
+package pcap
 
 import (
 	"errors"
@@ -14,16 +14,16 @@ import (
 func Test_defaultOptions(t *testing.T) {
 	tests := []struct {
 		name string
-		want ServerOptions
+		want Options
 	}{
 		{
 			name: "default options",
-			want: ServerOptions{
-				snapshotLen: int32(defaultSnapLen),
-				promiscuous: defaultPromiscuous,
-				device:      defaultDevice,
-				timeout:     time.Duration(defaultTimeout),
-				port:        defaultPort,
+			want: Options{
+				SnapshotLen: int32(defaultSnapLen),
+				Promiscuous: defaultPromiscuous,
+				Device:      defaultDevice,
+				Timeout:     time.Duration(defaultTimeout),
+				Port:        defaultPort,
 			},
 		},
 	}
@@ -38,17 +38,17 @@ func Test_defaultOptions(t *testing.T) {
 
 func Test_loadOptions(t *testing.T) {
 	type args struct {
-		os []ServerOption
+		os []Option
 	}
 	tests := []struct {
 		name string
 		args args
-		want ServerOptions
+		want Options
 	}{
 		{
 			name: "load options",
 			args: args{
-				os: []ServerOption{
+				os: []Option{
 					WithInterface("eth0"),
 					WithPort(8080),
 					WithTimeOut(5 * time.Second),
@@ -56,18 +56,18 @@ func Test_loadOptions(t *testing.T) {
 					WithPromiscuous(true),
 				},
 			},
-			want: ServerOptions{
-				snapshotLen: 65535,
-				promiscuous: true,
-				device:      "eth0",
-				timeout:     5 * time.Second,
-				port:        8080,
+			want: Options{
+				SnapshotLen: 65535,
+				Promiscuous: true,
+				Device:      "eth0",
+				Timeout:     5 * time.Second,
+				Port:        8080,
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := loadOptions(tt.args.os...); !reflect.DeepEqual(got, tt.want) {
+			if got := LoadOptions(tt.args.os...); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("loadOptions() = %v, want %v", got, tt.want)
 			}
 		})
@@ -93,7 +93,7 @@ func TestWithInterface(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, WithInterface(tt.args.n)(defaultOptions()).device)
+			assert.Equal(t, tt.want, WithInterface(tt.args.n)(defaultOptions()).Device)
 		})
 	}
 }
@@ -117,7 +117,7 @@ func TestWithPort(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, WithPort(tt.args.n)(defaultOptions()).port)
+			assert.Equal(t, tt.want, WithPort(tt.args.n)(defaultOptions()).Port)
 		})
 	}
 }
@@ -141,7 +141,7 @@ func TestWithTimeOut(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, WithTimeOut(tt.args.n)(defaultOptions()).timeout)
+			assert.Equal(t, tt.want, WithTimeOut(tt.args.n)(defaultOptions()).Timeout)
 		})
 	}
 }
@@ -166,7 +166,7 @@ func TestWithSnapLen(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, WithSnapLen(tt.args.n)(defaultOptions()).snapshotLen)
+			assert.Equal(t, tt.want, WithSnapLen(tt.args.n)(defaultOptions()).SnapshotLen)
 		})
 	}
 }
@@ -190,7 +190,7 @@ func TestWithPromiscuous(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, WithPromiscuous(tt.args.n)(defaultOptions()).promiscuous)
+			assert.Equal(t, tt.want, WithPromiscuous(tt.args.n)(defaultOptions()).Promiscuous)
 		})
 	}
 }
@@ -198,7 +198,7 @@ func TestWithPromiscuous(t *testing.T) {
 func TestOptFromEnv(t *testing.T) {
 	tests := []struct {
 		name    string
-		want    ServerOptions
+		want    Options
 		wantErr bool
 		envs    map[string]string
 	}{
@@ -211,12 +211,12 @@ func TestOptFromEnv(t *testing.T) {
 				EnvTimeOut:     "5",
 				EnvPort:        "8080",
 			},
-			want: ServerOptions{
-				snapshotLen: 65535,
-				promiscuous: true,
-				device:      "eth0",
-				timeout:     5 * time.Second,
-				port:        8080,
+			want: Options{
+				SnapshotLen: 65535,
+				Promiscuous: true,
+				Device:      "eth0",
+				Timeout:     5 * time.Second,
+				Port:        8080,
 			},
 			wantErr: false,
 		},
@@ -268,7 +268,7 @@ func TestOptFromEnv(t *testing.T) {
 				t.Errorf("OptFromEnv() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			g := loadOptions(got...)
+			g := LoadOptions(got...)
 			if !reflect.DeepEqual(g, tt.want) {
 				t.Errorf("OptFromEnv() = %v, want %v", g, tt.want)
 			}

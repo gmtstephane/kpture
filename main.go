@@ -1,84 +1,76 @@
 package main
 
-import (
-	"context"
-	"os"
-	"os/signal"
-	"syscall"
-
-	nested "github.com/antonfisher/nested-logrus-formatter"
-	"github.com/gmtstephane/kpture/pkg/kpture"
-	"github.com/sirupsen/logrus"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
+import "github.com/gmtstephane/kpture/cmd"
 
 func main() {
-	logfile, err := os.OpenFile("kpture.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
-	if err != nil {
-		logrus.Error(err)
-		return
-	}
-	logrus.SetOutput(logfile)
+	cmd.Execute()
 
-	logrus.SetFormatter(&nested.Formatter{
-		HideKeys:       true,
-		NoColors:       true,
-		NoFieldsColors: true,
-		FieldsOrder:    []string{"component", "category"},
-	})
-	// pods := []*kpture.KpturePod{}
+	// logfile, err := os.OpenFile("kpture.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o666)
+	// if err != nil {
+	// 	logrus.Error(err)
+	// 	return
+	// }
+	// logrus.SetOutput(logfile)
 
-	client, err := kpture.GetClient()
-	if err != nil {
-		logrus.Error(err)
-		return
-	}
+	// logrus.SetFormatter(&nested.Formatter{
+	// 	HideKeys:       true,
+	// 	NoColors:       true,
+	// 	NoFieldsColors: true,
+	// 	FieldsOrder:    []string{"component", "category"},
+	// })
+	// // pods := []*kpture.KpturePod{}
 
-	podList := []kpture.PodDescriptor{}
+	// client, err := kpture.GetClient()
+	// if err != nil {
+	// 	logrus.Error(err)
+	// 	return
+	// }
 
-	pods, err := client.Clientset.List(context.Background(), v1.ListOptions{})
-	if err != nil {
-		logrus.Error(err)
-		return
-	}
-	for _, pod := range pods.Items {
-		podList = append(podList, kpture.PodDescriptor{
-			Name:      pod.Name,
-			Namespace: pod.Namespace,
-		})
-	}
+	// podList := []kpture.PodDescriptor{}
 
-	kpture, err := kpture.NewKpture(client, podList)
-	if err != nil {
-		logrus.Error(err)
-		return
-	}
+	// pods, err := client.Clientset.List(context.Background(), v1.ListOptions{})
+	// if err != nil {
+	// 	logrus.Error(err)
+	// 	return
+	// }
+	// for _, pod := range pods.Items {
+	// 	podList = append(podList, kpture.PodDescriptor{
+	// 		Name:      pod.Name,
+	// 		Namespace: pod.Namespace,
+	// 	})
+	// }
 
-	c := make(chan os.Signal)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		kpture.Stop()
-		os.Exit(1)
-	}()
+	// kpture, err := kpture.NewKpture(client, podList)
+	// if err != nil {
+	// 	logrus.Error(err)
+	// 	return
+	// }
 
-	err = kpture.SetupEphemeralContainers()
-	if err != nil {
-		logrus.Error(err)
-		return
-	}
+	// c := make(chan os.Signal)
+	// signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	// go func() {
+	// 	<-c
+	// 	kpture.Stop()
+	// 	os.Exit(1)
+	// }()
 
-	err = kpture.SetupPortForwarding()
-	if err != nil {
-		logrus.Error(err)
-		return
-	}
+	// err = kpture.SetupEphemeralContainers()
+	// if err != nil {
+	// 	logrus.Error(err)
+	// 	return
+	// }
 
-	kpture.ReadPacketsConn()
+	// err = kpture.SetupPortForwarding()
+	// if err != nil {
+	// 	logrus.Error(err)
+	// 	return
+	// }
 
-	err = kpture.HandlePackets(os.Stdout)
-	if err != nil {
-		logrus.Error(err)
-		return
-	}
+	// kpture.ReadPacketsConn()
+
+	// err = kpture.HandlePackets(os.Stdout)
+	// if err != nil {
+	// 	logrus.Error(err)
+	// 	return
+	// }
 }

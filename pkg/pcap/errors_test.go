@@ -1,6 +1,10 @@
-package kpture
+package pcap
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestInvalidEnvParamError_Error(t *testing.T) {
 	type fields struct {
@@ -24,9 +28,7 @@ func TestInvalidEnvParamError_Error(t *testing.T) {
 			e := InvalidEnvParamError{
 				param: tt.fields.param,
 			}
-			if got := e.Error(); got != tt.want {
-				t.Errorf("InvalidEnvParamError.Error() = %v, want %v", got, tt.want)
-			}
+			assert.Equal(t, tt.want, e.Error())
 		})
 	}
 }

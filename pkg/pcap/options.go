@@ -1,6 +1,7 @@
-package kpture
+package pcap
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -8,27 +9,30 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type ServerOption func(o ServerOptions) ServerOptions
+type Option func(o Options) Options
 
-type ServerOptions struct {
-	snapshotLen int32
-	promiscuous bool
-	device      string
-	timeout     time.Duration
-	port        int
+type Options struct {
+	SnapshotLen int32
+	Promiscuous bool
+	Device      string
+	Timeout     time.Duration
+	Port        int
 }
 
-func defaultOptions() ServerOptions {
-	return ServerOptions{
-		snapshotLen: int32(defaultSnapLen),
-		promiscuous: defaultPromiscuous,
-		device:      defaultDevice,
-		timeout:     time.Duration(defaultTimeout),
-		port:        defaultPort,
+func defaultOptions() Options {
+	return Options{
+		SnapshotLen: int32(defaultSnapLen),
+		Promiscuous: defaultPromiscuous,
+		Device:      defaultDevice,
+		Timeout:     time.Duration(defaultTimeout),
+		Port:        defaultPort,
 	}
 }
 
-func loadOptions(os ...ServerOption) ServerOptions {
+func test() {
+	fmt.Println("test")
+}
+func LoadOptions(os ...Option) Options {
 	opts := defaultOptions()
 	for _, o := range os {
 		opts = o(opts)
@@ -36,37 +40,37 @@ func loadOptions(os ...ServerOption) ServerOptions {
 	return opts
 }
 
-func WithInterface(n string) ServerOption {
-	return func(o ServerOptions) ServerOptions {
-		o.device = n
+func WithInterface(n string) Option {
+	return func(o Options) Options {
+		o.Device = n
 		return o
 	}
 }
 
-func WithPort(n int) ServerOption {
-	return func(o ServerOptions) ServerOptions {
-		o.port = n
+func WithPort(n int) Option {
+	return func(o Options) Options {
+		o.Port = n
 		return o
 	}
 }
 
-func WithTimeOut(n time.Duration) ServerOption {
-	return func(o ServerOptions) ServerOptions {
-		o.timeout = n
+func WithTimeOut(n time.Duration) Option {
+	return func(o Options) Options {
+		o.Timeout = n
 		return o
 	}
 }
 
-func WithSnapLen(n int32) ServerOption {
-	return func(o ServerOptions) ServerOptions {
-		o.snapshotLen = n
+func WithSnapLen(n int32) Option {
+	return func(o Options) Options {
+		o.SnapshotLen = n
 		return o
 	}
 }
 
-func WithPromiscuous(n bool) ServerOption {
-	return func(o ServerOptions) ServerOptions {
-		o.promiscuous = n
+func WithPromiscuous(n bool) Option {
+	return func(o Options) Options {
+		o.Promiscuous = n
 		return o
 	}
 }
@@ -79,8 +83,8 @@ const (
 	EnvInterface   = "Kpture_INTERFACE"
 )
 
-func OptFromEnv() ([]ServerOption, error) {
-	opts := []ServerOption{}
+func OptFromEnv() ([]Option, error) {
+	opts := []Option{}
 
 	if port := os.Getenv(EnvPort); port != "" {
 		p, err := strconv.Atoi(port)

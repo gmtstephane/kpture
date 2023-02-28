@@ -6,6 +6,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/gmtstephane/kpture/pkg/pcap"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -13,13 +14,13 @@ import (
 func TestGetClient(t *testing.T) {
 	t.Run("invalid kubeconfig", func(t *testing.T) {
 		t.Setenv("KUBECONFIG", "invalid")
-		_, err := GetClient()
+		_, err := GetClient("")
 		assert.NotNil(t, err)
 	})
 
 	t.Run("valid kubeconfig", func(t *testing.T) {
 		t.Setenv("KUBECONFIG", "../../test/kubeconfigs/sample1.yaml")
-		kc, err := GetClient()
+		kc, err := GetClient("")
 		assert.Nil(t, err)
 		assert.NotNil(t, kc)
 		assert.NotNil(t, kc.Clientset)
@@ -29,7 +30,7 @@ func TestGetClient(t *testing.T) {
 
 	t.Run("invalid kubeconfig", func(t *testing.T) {
 		t.Setenv("KUBECONFIG", "../../test/kubeconfigs/invalidConfig.yaml")
-		kc, err := GetClient()
+		kc, err := GetClient("")
 		assert.NotNil(t, err)
 		assert.Nil(t, kc)
 	})
@@ -39,7 +40,7 @@ func Test_generateDebugContainer(t *testing.T) {
 	type args struct {
 		pod  *corev1.Pod
 		name string
-		opts ServerOptions
+		opts pcap.Options
 	}
 	tests := []struct {
 		name string
@@ -63,10 +64,10 @@ func Test_generateDebugContainer(t *testing.T) {
 					},
 				},
 				name: "test-container",
-				opts: ServerOptions{
-					port:        8080,
-					snapshotLen: 1024,
-					timeout:     -1,
+				opts: pcap.Options{
+					Port:        8080,
+					SnapshotLen: 1024,
+					Timeout:     -1,
 				},
 			},
 			want: &corev1.Pod{

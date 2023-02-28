@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gmtstephane/kpture/api/capture"
+	"github.com/gmtstephane/kpture/pkg/pcap"
 
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -31,7 +32,7 @@ type Pod struct {
 	name           string
 	debugContainer string
 	namespace      string
-	serverOptions  ServerOptions
+	pcapOptions    pcap.Options
 	localPort      int
 	fw             *portforward.PortForwarder
 	stopCh         chan struct{}
@@ -47,7 +48,7 @@ type PodInterface interface {
 	UpdateEphemeralContainers(ctx context.Context, podName string, pod *v1.Pod, opts metav1.UpdateOptions) (*v1.Pod, error)
 }
 
-func NewKpturePod(name string, ns string, id string, serverOptions ServerOptions, errchan chan error) (*Pod, error) {
+func NewKpturePod(name string, ns string, id string, pcapOptions pcap.Options, errchan chan error) (*Pod, error) {
 	localPort, err := getFreePort()
 	if err != nil {
 		return nil, err
@@ -57,12 +58,12 @@ func NewKpturePod(name string, ns string, id string, serverOptions ServerOptions
 		name:           name,
 		namespace:      ns,
 		debugContainer: DebugContainerName + "-" + id,
-		serverOptions:  serverOptions,
+		pcapOptions:    pcapOptions,
 		localPort:      localPort,
 		readyCh:        make(chan struct{}),
 		stopCh:         make(chan struct{}),
 		errCh:          errchan,
-		log:            logrus.WithField("Name", name).WithField("Namespace", ns).WithField("id ", id),
+		log:            logrus.WithField("Name", name).WithField("Namespace", ns),
 	}
 	return k, nil
 }
@@ -103,7 +104,7 @@ func (k *Pod) InjectContainer(client PodInterface, name string) error {
 		return err
 	}
 
-	debugPod := generateDebugContainer(pod, name, k.serverOptions)
+	debugPod := generateDebugContainer(pod, name, k.pcapOptions)
 
 	_, err = client.UpdateEphemeralContainers(context.Background(), pod.Name, debugPod, metav1.UpdateOptions{})
 	if err != nil {
@@ -138,7 +139,7 @@ func (k *Pod) PortForwardAPod(restConf *rest.Config) error {
 	)
 	k.fw, err = portforward.New(
 		dialer,
-		[]string{fmt.Sprintf("%d:%d", k.localPort, k.serverOptions.port)},
+		[]string{fmt.Sprintf("%d:%d", k.localPort, k.pcapOptions.Port)},
 		k.stopCh,
 		k.readyCh,
 		devnull,
@@ -192,7 +193,7 @@ func (k *Pod) Close() {
 	}
 }
 
-func (k *Pod) ReadPackets(packetCh chan *capture.Packet) {
+func (k *Pod) ReadPackets(packetCh chan *PacketCapture) {
 	k.log.Info("Reading packets from pod ", k.name)
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithInsecure())
@@ -226,7 +227,10 @@ func (k *Pod) ReadPackets(packetCh chan *capture.Packet) {
 		}
 
 		select {
-		case packetCh <- packet:
+		case packetCh <- &PacketCapture{
+			Packet: packet,
+			Pod:    k.name,
+		}:
 		default:
 			k.errCh <- errors.New("packet channel is full")
 		}
