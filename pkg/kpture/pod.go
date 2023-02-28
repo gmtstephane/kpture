@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	defaultPullTimeout = 20
+	defaultPullTimeout = 60
 )
 
 type Pod struct {
