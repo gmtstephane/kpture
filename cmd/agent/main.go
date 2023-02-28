@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/gmtstephane/kpture/api/capture"
+	"github.com/gmtstephane/kpture/pkg/kpture"
 	"github.com/gmtstephane/kpture/pkg/pcap"
 
 	"github.com/sirupsen/logrus"
@@ -17,7 +18,7 @@ func main() {
 	logrus.Info("loading env vars")
 	// godotenv.Load()
 
-	serverOptions, err := pcap.OptFromEnv()
+	serverOptions, err := kpture.OptFromEnv()
 	if err != nil {
 		logrus.Error(err)
 		return

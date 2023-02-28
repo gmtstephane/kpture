@@ -1,4 +1,4 @@
-package pcap
+package kpture
 
 type InvalidEnvParamError struct {
 	param string

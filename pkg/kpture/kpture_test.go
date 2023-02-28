@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gmtstephane/kpture/api/capture"
-	"github.com/gmtstephane/kpture/pkg/pcap"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -66,7 +65,7 @@ func TestKpture_SetupEphemeralContainers(t *testing.T) {
 	client, err := GetClient("")
 	assert.Nil(t, err)
 	t.Run("setup ephemeral container", func(t *testing.T) {
-		k, errNewKpture := NewKpture(client, []PodDescriptor{{Name: "podsample"}}, pcap.WithPort(port))
+		k, errNewKpture := NewKpture(client, []PodDescriptor{{Name: "podsample"}}, WithPort(port))
 		assert.Nil(t, errNewKpture)
 		errSetupContainer := k.SetupEphemeralContainers()
 		assert.Nil(t, errSetupContainer)

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/gmtstephane/kpture/api/capture"
-	"github.com/gmtstephane/kpture/pkg/pcap"
 
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -32,7 +31,7 @@ type Pod struct {
 	name           string
 	debugContainer string
 	namespace      string
-	pcapOptions    pcap.Options
+	pcapOptions    Options
 	localPort      int
 	fw             *portforward.PortForwarder
 	stopCh         chan struct{}
@@ -48,7 +47,7 @@ type PodInterface interface {
 	UpdateEphemeralContainers(ctx context.Context, podName string, pod *v1.Pod, opts metav1.UpdateOptions) (*v1.Pod, error)
 }
 
-func NewKpturePod(name string, ns string, id string, pcapOptions pcap.Options, errchan chan error) (*Pod, error) {
+func NewKpturePod(name string, ns string, id string, pcapOptions Options, errchan chan error) (*Pod, error) {
 	localPort, err := getFreePort()
 	if err != nil {
 		return nil, err
@@ -88,12 +87,16 @@ func (k *Pod) CreateDebugContainer(client PodInterface) error {
 				return errGetPod
 			}
 			for _, eph := range pod.Status.EphemeralContainerStatuses {
-				if eph.Name == k.debugContainer && eph.State.Running != nil {
-					return nil
+				if eph.Name == k.debugContainer {
+					if eph.State.Running != nil {
+						k.log.Info("container ready")
+						return nil
+					}
+					k.log.Info("Waiting for debug container to be ready...")
+					k.log.Info("Current status: ", eph.State.String())
 				}
 			}
 			time.Sleep(1 * time.Second)
-			k.log.Info("Waiting for debug container to be ready...")
 		}
 	}
 }

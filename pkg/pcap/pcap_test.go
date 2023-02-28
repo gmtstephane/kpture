@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gmtstephane/kpture/api/capture"
+	"github.com/gmtstephane/kpture/pkg/kpture"
 	"github.com/gmtstephane/kpture/pkg/kpture/mocks"
 
 	"github.com/golang/mock/gomock"
@@ -37,7 +38,7 @@ func TestNewCaptureServer(t *testing.T) {
 	}
 	flag.Parse()
 	type args struct {
-		os []Option
+		os []kpture.Option
 	}
 	tests := []struct {
 		name    string
@@ -47,12 +48,12 @@ func TestNewCaptureServer(t *testing.T) {
 		{
 			name: "test",
 			args: args{
-				os: []Option{
-					WithPort(8888),
-					WithInterface(*interfaceName),
-					WithSnapLen(1500),
-					WithPromiscuous(true),
-					WithTimeOut(5 * time.Second),
+				os: []kpture.Option{
+					kpture.WithPort(8888),
+					kpture.WithInterface(*interfaceName),
+					kpture.WithSnapLen(1500),
+					kpture.WithPromiscuous(true),
+					kpture.WithTimeOut(5 * time.Second),
 				},
 			},
 			wantErr: false,
@@ -79,7 +80,7 @@ func TestNewCaptureServer(t *testing.T) {
 
 func TestServer_Port(t *testing.T) {
 	type fields struct {
-		options                   Options
+		options                   kpture.Options
 		packets                   chan gopacket.Packet
 		handle                    *pcap.Handle
 		UnimplementedKptureServer capture.UnimplementedKptureServer
@@ -92,7 +93,7 @@ func TestServer_Port(t *testing.T) {
 		{
 			name: "valid port",
 			fields: fields{
-				options: Options{
+				options: kpture.Options{
 					Port: 8888,
 				},
 			},
@@ -121,7 +122,7 @@ func TestServer_PacketsStream(t *testing.T) {
 		packetch := make(chan gopacket.Packet)
 		s := &Server{
 			packets: packetch,
-			options: Options{
+			options: kpture.Options{
 				Port: 8888,
 			},
 		}
@@ -147,7 +148,7 @@ func TestServer_PacketsStream(t *testing.T) {
 		packetch := make(chan gopacket.Packet)
 		s := &Server{
 			packets: packetch,
-			options: Options{
+			options: kpture.Options{
 				Port: 8888,
 			},
 		}

@@ -6,7 +6,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/gmtstephane/kpture/pkg/pcap"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -40,7 +39,7 @@ func Test_generateDebugContainer(t *testing.T) {
 	type args struct {
 		pod  *corev1.Pod
 		name string
-		opts pcap.Options
+		opts Options
 	}
 	tests := []struct {
 		name string
@@ -64,7 +63,7 @@ func Test_generateDebugContainer(t *testing.T) {
 					},
 				},
 				name: "test-container",
-				opts: pcap.Options{
+				opts: Options{
 					Port:        8080,
 					SnapshotLen: 1024,
 					Timeout:     -1,

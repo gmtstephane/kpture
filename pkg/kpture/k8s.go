@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gmtstephane/kpture/pkg/pcap"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -81,7 +80,7 @@ func (k *KubeClient) SelectPods(pods []string, all bool) ([]PodDescriptor, error
 	return podDescriptors, nil
 }
 
-func generateDebugContainer(pod *corev1.Pod, name string, opts pcap.Options) *corev1.Pod {
+func generateDebugContainer(pod *corev1.Pod, name string, opts Options) *corev1.Pod {
 	ec := &corev1.EphemeralContainer{
 		EphemeralContainerCommon: corev1.EphemeralContainerCommon{
 			Name: name,

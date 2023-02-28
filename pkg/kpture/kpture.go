@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gmtstephane/kpture/api/capture"
-	"github.com/gmtstephane/kpture/pkg/pcap"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -35,10 +34,10 @@ type Kpture struct {
 	packetChan chan *PacketCapture
 	errChan    chan error
 	kpturePods []*Pod
-	opts       pcap.Options
+	opts       Options
 }
 
-func NewKpture(client *KubeClient, pods []PodDescriptor, opts ...pcap.Option) (*Kpture, error) {
+func NewKpture(client *KubeClient, pods []PodDescriptor, opts ...Option) (*Kpture, error) {
 	var err error
 	k := &Kpture{
 		client:     client,
@@ -52,7 +51,7 @@ func NewKpture(client *KubeClient, pods []PodDescriptor, opts ...pcap.Option) (*
 		logrus.Error(err)
 		return nil, err
 	}
-	k.opts = pcap.LoadOptions(opts...)
+	k.opts = LoadOptions(opts...)
 	for _, pod := range pods {
 		pod, errGetPod := client.Clientset.Get(context.Background(), pod.Name, v1.GetOptions{})
 		if errGetPod != nil {

@@ -1,4 +1,4 @@
-package pcap
+package kpture
 
 import (
 	"fmt"
@@ -7,6 +7,14 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+)
+
+const (
+	defaultSnapLen     uint32 = 1500
+	defaultPromiscuous bool   = true
+	defaultDevice      string = "eth0"
+	defaultTimeout     int    = -1
+	defaultPort        int    = 10000
 )
 
 type Option func(o Options) Options
@@ -32,6 +40,7 @@ func defaultOptions() Options {
 func test() {
 	fmt.Println("test")
 }
+
 func LoadOptions(os ...Option) Options {
 	opts := defaultOptions()
 	for _, o := range os {

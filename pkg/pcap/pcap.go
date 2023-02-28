@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/gmtstephane/kpture/api/capture"
+	"github.com/gmtstephane/kpture/pkg/kpture"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
@@ -13,24 +14,16 @@ import (
 	"google.golang.org/grpc/stats"
 )
 
-const (
-	defaultSnapLen     uint32 = 1500
-	defaultPromiscuous bool   = true
-	defaultDevice      string = "eth0"
-	defaultTimeout     int    = -1
-	defaultPort        int    = 10000
-)
-
 type Server struct {
-	options Options
+	options kpture.Options
 	packets chan gopacket.Packet
 	handle  *pcap.Handle
 	capture.UnimplementedKptureServer
 }
 
-func NewCaptureServer(os ...Option) (*Server, error) {
+func NewCaptureServer(os ...kpture.Option) (*Server, error) {
 	var err error
-	opts := LoadOptions(os...)
+	opts := kpture.LoadOptions(os...)
 
 	s := Server{
 		options: opts,
