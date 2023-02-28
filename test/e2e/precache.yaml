@@ -7,4 +7,4 @@ metadata:
 spec:
   containers:
   - name: agent
-    image: docker.io/gmtstephane/agent:latest"
+    image: gmtstephane/agent:latest

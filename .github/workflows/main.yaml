@@ -26,7 +26,9 @@ jobs:
         run: |
           kubectl get nodes
           kubectl apply -f test/e2e/pod.yaml 
+          kubectl apply -f test/e2e/precache.yaml
           kubectl wait pods podsample -n default --for condition=Ready
+          kubectl wait pods agent -n default --for condition=Ready
           kubectl wait pods podsample-integration -n default --for condition=Ready
           kubectl config set-context --current --namespace=default
       - run: |
