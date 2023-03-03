@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -26,6 +27,7 @@ type Options struct {
 	Timeout     time.Duration
 	Port        int
 	Proxy       string
+	UUID        string
 }
 
 func (o Options) Target() string {
@@ -39,11 +41,8 @@ func defaultOptions() Options {
 		Device:      defaultDevice,
 		Timeout:     time.Duration(defaultTimeout),
 		Port:        defaultPort,
+		UUID:        uuid.New().String(),
 	}
-}
-
-func test() {
-	fmt.Println("test")
 }
 
 func LoadOptions(os ...Option) Options {
@@ -88,6 +87,7 @@ func WithPromiscuous(n bool) Option {
 		return o
 	}
 }
+
 func WithProxy(n string) Option {
 	return func(o Options) Options {
 		o.Proxy = n

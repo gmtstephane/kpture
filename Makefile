@@ -14,8 +14,8 @@ docker:
 	docker push ghcr.io/gmtstephane/kpture:latest
 
 buildx_proxy:
-	buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/gmtstephane/kpture_proxy:latest . -f Dockerfile.proxy --push
+	docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/gmtstephane/kpture_proxy:latest . -f Dockerfile.proxy --push
 buildx_agent:
-	buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/gmtstephane/kpture:latest . -f Dockerfile.agent --push
+	docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/gmtstephane/kpture:latest . -f Dockerfile.agent --push
 
 buildx: buildx_proxy buildx_agent

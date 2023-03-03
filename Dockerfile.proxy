@@ -11,5 +11,4 @@ RUN go build -a -ldflags "-linkmode external -extldflags '-static' -s -w" -o /ap
 FROM scratch
 # Copy our static executable.
 COPY --from=base /app/service/kpture /kpture
-# Run the hello binary.
 CMD ["/kpture"]

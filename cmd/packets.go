@@ -4,44 +4,152 @@ Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gernest/wow"
+	"github.com/gernest/wow/spin"
+	"github.com/gmtstephane/kpture/api/capture"
 	"github.com/gmtstephane/kpture/pkg/k8s"
 	"github.com/gmtstephane/kpture/pkg/kpture"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
+	"github.com/google/gopacket/pcapgo"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// func printlines(m map[string]int, i *uilive.Writer) {
-// 	i.Flush()
-// 	for key, value := range m {
-// 	}
-// }
-
-// packetsCmd represents the packets command
 var packetsCmd = &cobra.Command{
 	Use:   "packets",
 	Short: "capture packet from pods",
 	Run: func(cmd *cobra.Command, args []string) {
+		log.SetFlags(0)
+		log.SetOutput(os.Stderr)
 		client, err := k8s.GetClient(Namespace)
 		if err != nil {
 			logrus.Error(err)
 			return
 		}
-		err = client.SetupProxy("1234")
+
+		// select the pods to capture
+		pods, err := client.SelectPods(args, All)
 		if err != nil {
 			logrus.Error(err)
 			return
 		}
-		// client, err := kpture.GetClient(Namespace)
-		// if err != nil {
-		// 	logrus.Error(err)
-		// 	return
-		// }
-		// pods, err := client.SelectPods(args, All)
-		// if err != nil {
-		// 	logrus.Error(err)
-		// 	return
-		// }
+
+		log.Println("Starting the proxy...")
+		options := kpture.LoadOptions()
+		ip, err := client.SetupProxy(options.UUID, 10000)
+		if err != nil {
+			logrus.Error(err)
+			return
+		}
+		options.Proxy = ip
+
+		// cleanup the proxy at the end or on interrupt
+		defer tearDown(client, options)
+
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-c
+			tearDown(client, options)
+			os.Exit(1)
+		}()
+
+		log.Println("Port forwarding the proxy...")
+		// port forward the proxy
+		stopch, port, err := client.PortForward(options.UUID)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		defer close(stopch)
+
+		log.Println("Injecting the debug containers...")
+		// inject the debug container
+		err = client.SetupEphemeralContainers(pods, options)
+		if err != nil {
+			logrus.Error(err)
+			return
+		}
+
+		// time.Sleep(1 * time.Second)
+		// stopch <- struct{}{}
+
+		conn, err := grpc.Dial(
+			fmt.Sprintf("%s:%d", "127.0.0.1", port),
+			grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			logrus.Error(err)
+			return
+		}
+		defer conn.Close()
+
+		cli := capture.NewPackgetGetterClient(conn)
+
+		packets, err := cli.GetPackets(context.Background(), &capture.Empty{})
+		if err != nil {
+			logrus.Error(err)
+			return
+		}
+
+		log.Println("Capturing packets 🚀")
+
+		if !Raw {
+			w := wow.New(os.Stderr, spin.Get(spin.GrowHorizontal), "")
+			w.Start()
+			counter := 0
+			for {
+				_, errReceive := packets.Recv()
+				if errReceive != nil {
+					logrus.Error(errReceive)
+					return
+				}
+				counter++
+				w.Text("Captured " + fmt.Sprint(counter) + " packets")
+				if err != nil {
+					log.Println(err)
+					return
+				}
+			}
+
+		} else {
+			pcapwriter := pcapgo.NewWriter(os.Stdout)
+			err = pcapwriter.WriteFileHeader(uint32(options.SnapshotLen), layers.LinkTypeEthernet)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			for {
+				p, errReceive := packets.Recv()
+				if errReceive != nil {
+					logrus.Error(errReceive)
+					return
+				}
+
+				err = pcapwriter.WritePacket(gopacket.CaptureInfo{
+					Timestamp:      time.Now(),
+					CaptureLength:  int(p.GetCaptureInfo().GetCaptureLength()),
+					Length:         int(p.GetCaptureInfo().GetLength()),
+					InterfaceIndex: int(p.GetCaptureInfo().GetInterfaceIndex()),
+				}, p.GetData())
+				if err != nil {
+					log.Println(err)
+					return
+				}
+
+			}
+		}
 
 		// logrus.SetFormatter(&nested.Formatter{
 		// 	HideKeys:       true,
@@ -145,7 +253,6 @@ var packetsCmd = &cobra.Command{
 		// 	writers[packet.Pod]++
 		// 	// fmt.Println(writers)
 		// }
-
 	},
 
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -190,4 +297,12 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// packetsCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+func tearDown(client *k8s.KubeClient, options kpture.Options) {
+	logrus.Info("tearing down")
+	errteardown := client.TearDownProxy(options.UUID)
+	if errteardown != nil {
+		logrus.Error(errteardown)
+	}
 }

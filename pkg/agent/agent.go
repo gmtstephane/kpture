@@ -11,15 +11,14 @@ import (
 	"github.com/gmtstephane/kpture/pkg/kpture"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
-	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 func Start() {
-	logrus.Info("loading env vars")
-	godotenv.Load()
+	// logrus.Info("loading env vars")
+	// godotenv.Load()
 	envs, err := kpture.OptFromEnv()
 	if err != nil {
 		terminationMessage(err)
@@ -33,14 +32,11 @@ func Start() {
 		terminationMessage(err)
 		os.Exit(1)
 	}
-	// if errBPFFilter := handle.SetBPFFilter(fmt.Sprintf("port not %d", opt.Port)); errBPFFilter != nil {
-	// 	terminationMessage(err)
-	// 	os.Exit(1)
-	// }
-	if errBPFFilter := handle.SetBPFFilter(fmt.Sprintf("icmp")); errBPFFilter != nil {
+	if errBPFFilter := handle.SetBPFFilter(fmt.Sprintf("port not %d", opt.Port)); errBPFFilter != nil {
 		terminationMessage(err)
 		os.Exit(1)
 	}
+
 	conn, err := grpc.Dial(opt.Target(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		terminationMessage(err)
@@ -57,11 +53,10 @@ func Start() {
 		os.Exit(1)
 	}
 
-	//If we receive a message back, we close the connexion and exit
+	// If we receive a message back, we close the connexion and exit
 	go func() {
 		for {
-			packet, _ := addPacketClient.Recv()
-			fmt.Println(packet)
+			addPacketClient.Recv()
 			logrus.Info("Capture is done")
 			conn.Close()
 			os.Exit(0)
