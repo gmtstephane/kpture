@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gmtstephane/kpture/api/capture"
@@ -37,7 +38,7 @@ type Pod struct {
 	stopCh         chan struct{}
 	errCh          chan<- error
 	readyCh        chan struct{}
-	capture        capture.Kpture_PacketsStreamClient
+	capture        capture.PackgetGetter_GetPacketsClient
 	log            *logrus.Entry
 }
 
@@ -52,7 +53,6 @@ func NewKpturePod(name string, ns string, id string, pcapOptions Options, errcha
 	if err != nil {
 		return nil, err
 	}
-
 	k := &Pod{
 		name:           name,
 		namespace:      ns,
@@ -67,11 +67,13 @@ func NewKpturePod(name string, ns string, id string, pcapOptions Options, errcha
 	return k, nil
 }
 
-func (k *Pod) CreateDebugContainer(client PodInterface) error {
-	k.log.Info("Creating debug container")
+func (k *Pod) CreateDebugContainer(client PodInterface, errchan chan error, readychan chan struct{}, wg *sync.WaitGroup) {
+	defer wg.Done()
+	// k.log.Info("Creating debug container")
 	err := k.InjectContainer(client, k.debugContainer)
 	if err != nil {
-		return err
+		errchan <- err
+		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(defaultPullTimeout)*time.Second)
@@ -80,20 +82,20 @@ func (k *Pod) CreateDebugContainer(client PodInterface) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.New("timeout waiting for debug container to be ready")
+			errchan <- errors.New("timeout waiting for debug container to be ready")
+			return
 		default:
 			pod, errGetPod := client.Get(context.Background(), k.name, metav1.GetOptions{})
 			if errGetPod != nil {
-				return errGetPod
+				errchan <- errGetPod
+				return
 			}
 			for _, eph := range pod.Status.EphemeralContainerStatuses {
 				if eph.Name == k.debugContainer {
 					if eph.State.Running != nil {
-						k.log.Info("container ready")
-						return nil
+						readychan <- struct{}{}
+						return
 					}
-					k.log.Info("Waiting for debug container to be ready...")
-					k.log.Info("Current status: ", eph.State.String())
 				}
 			}
 			time.Sleep(1 * time.Second)
@@ -118,20 +120,21 @@ func (k *Pod) InjectContainer(client PodInterface, name string) error {
 	return nil
 }
 
-func (k *Pod) PortForwardAPod(restConf *rest.Config) error {
-	k.log.Info("Port forwarding to pod ", k.name)
+func (k *Pod) PortForwardAPod(restConf *rest.Config, errchan chan error, readychan chan struct{}, wg *sync.WaitGroup) {
+	// k.log.Info("Port forwarding to pod ", k.name)
+	defer wg.Done()
 	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0o755)
 	if err != nil {
-		k.log.Error(err)
-		return err
+		errchan <- err
+		return
 	}
 
 	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", k.namespace, k.name)
 	hostIP := strings.TrimLeft(restConf.Host, "htps:/")
 	transport, upgrader, err := spdy.RoundTripperFor(restConf)
 	if err != nil {
-		k.log.Error(err)
-		return err
+		errchan <- err
+		return
 	}
 
 	dialer := spdy.NewDialer(
@@ -150,8 +153,8 @@ func (k *Pod) PortForwardAPod(restConf *rest.Config) error {
 	)
 
 	if err != nil {
-		k.log.Error(err)
-		return err
+		errchan <- err
+		return
 	}
 
 	go func() {
@@ -164,7 +167,8 @@ func (k *Pod) PortForwardAPod(restConf *rest.Config) error {
 
 	<-k.readyCh
 
-	return err
+	readychan <- struct{}{}
+	return
 }
 
 // getFreePort asks the kernel for a free open port that is ready to use.
@@ -197,7 +201,7 @@ func (k *Pod) Close() {
 }
 
 func (k *Pod) ReadPackets(packetCh chan *PacketCapture) {
-	k.log.Info("Reading packets from pod ", k.name)
+	// k.log.Info("Reading packets from pod ", k.name)
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithInsecure())
 	target := "localhost:" + fmt.Sprintf("%d", k.localPort)
@@ -209,9 +213,9 @@ func (k *Pod) ReadPackets(packetCh chan *PacketCapture) {
 
 	defer conn.Close()
 
-	client := capture.NewKptureClient(conn)
+	client := capture.NewPackgetGetterClient(conn)
 
-	k.capture, err = client.PacketsStream(context.Background(), &capture.Empty{})
+	k.capture, err = client.GetPackets(context.Background(), &capture.Empty{})
 	if err != nil {
 		k.log.Error(err)
 		k.errCh <- err

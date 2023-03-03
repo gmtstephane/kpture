@@ -6,13 +6,14 @@ option go_package = "github.com/gmtstephane/kpture/api/capture";
 message Auxiliary {
   string type_url = 1;
   bytes value = 2;
-}  
+}
+
 message CaptureInfo  {
-int64 Timestamp = 1;
-int64 CaptureLength =2;
-int64 Length =3;
-int64 InterfaceIndex =4;
-repeated Auxiliary AncillaryData =5;
+  int64 Timestamp = 1;
+  int64 CaptureLength =2;
+  int64 Length =3;
+  int64 InterfaceIndex =4;
+  repeated Auxiliary AncillaryData =5;
 }
 
 message Packet {
@@ -20,10 +21,24 @@ message Packet {
   bytes data =2;
 }
 
-
 message Empty  {}
 
-service Kpture{
-    rpc PacketsStream(Empty) returns (stream Packet) {}
-} 
+message ReadyRsp  {
+  bool ready =1;
+  repeated string notReady = 2;   
+}
 
+message Pod {
+  string Name = 1;
+  string Namespace = 2;
+}
+
+
+service PacketsReceiver{
+    rpc AddPacket(stream Packet) returns (stream Empty) {}
+    rpc Ready(Pod) returns (Empty) {}
+}
+
+service PackgetGetter{
+    rpc GetPackets(Empty) returns (stream Packet) {}
+}

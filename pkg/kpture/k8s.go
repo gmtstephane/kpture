@@ -44,6 +44,9 @@ func GetClient(namespace string) (*KubeClient, error) {
 	}
 	if namespace == "" {
 		namespace = rawConf.Contexts[rawConf.CurrentContext].Namespace
+		if namespace == "" {
+			namespace = "default"
+		}
 	}
 	return &KubeClient{
 		Namespace: namespace,
@@ -101,9 +104,13 @@ func generateDebugContainer(pod *corev1.Pod, name string, opts Options) *corev1.
 					Name:  "Kpture_TIMEOUT",
 					Value: fmt.Sprintf("%d", opts.Timeout),
 				},
+				{
+					Name:  "Kpture_PROXY",
+					Value: fmt.Sprintf("%s", "proxy"),
+				},
 			},
-			Image:                    "docker.io/gmtstephane/agent:latest",
-			ImagePullPolicy:          "IfNotPresent",
+			Image:                    "ghcr.io/gmtstephane/kpture:latest",
+			ImagePullPolicy:          corev1.PullAlways,
 			Stdin:                    true,
 			TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 			TTY:                      true,

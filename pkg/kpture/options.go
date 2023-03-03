@@ -25,6 +25,11 @@ type Options struct {
 	Device      string
 	Timeout     time.Duration
 	Port        int
+	Proxy       string
+}
+
+func (o Options) Target() string {
+	return fmt.Sprintf("%s:%d", o.Proxy, o.Port)
 }
 
 func defaultOptions() Options {
@@ -83,8 +88,15 @@ func WithPromiscuous(n bool) Option {
 		return o
 	}
 }
+func WithProxy(n string) Option {
+	return func(o Options) Options {
+		o.Proxy = n
+		return o
+	}
+}
 
 const (
+	EnvProxy       = "Kpture_PROXY"
 	EnvPort        = "Kpture_PORT"
 	EnvPromiscuous = "Kpture_PROMISCUOUS"
 	EnvSnapLen     = "Kpture_SNAPLEN"
@@ -102,6 +114,10 @@ func OptFromEnv() ([]Option, error) {
 			return nil, InvalidEnvParamError{param: EnvPort}
 		}
 		opts = append(opts, WithPort(p))
+	}
+
+	if proxy := os.Getenv(EnvProxy); proxy != "" {
+		opts = append(opts, WithProxy(proxy))
 	}
 
 	if promiscuous := os.Getenv(EnvPromiscuous); promiscuous != "" {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
-	"strings"
+	"sync"
 	"time"
 
 	"github.com/gmtstephane/kpture/api/capture"
@@ -45,24 +45,19 @@ func NewKpture(client *KubeClient, pods []PodDescriptor, opts ...Option) (*Kptur
 		errChan:    make(chan error),
 		kpturePods: []*Pod{},
 	}
+	k.opts = LoadOptions(opts...)
 
 	id, err := uuid.NewUUID()
 	if err != nil {
 		logrus.Error(err)
 		return nil, err
 	}
-	k.opts = LoadOptions(opts...)
+
 	for _, pod := range pods {
 		pod, errGetPod := client.Clientset.Get(context.Background(), pod.Name, v1.GetOptions{})
 		if errGetPod != nil {
 			logrus.Error(errGetPod)
 			return nil, errGetPod
-		}
-		for _, eph := range pod.Status.EphemeralContainerStatuses {
-			if strings.Contains("kpture", eph.Name) && eph.State.Running != nil {
-				logrus.Error("kpture already running on pod ", pod.Name)
-				return nil, err
-			}
 		}
 
 		kpturePod, errcapturePod := NewKpturePod(pod.Name, pod.Namespace, id.String(), k.opts, k.errChan)
@@ -72,6 +67,7 @@ func NewKpture(client *KubeClient, pods []PodDescriptor, opts ...Option) (*Kptur
 		}
 		k.kpturePods = append(k.kpturePods, kpturePod)
 	}
+
 	go k.handleErr()
 	return k, nil
 }
@@ -82,25 +78,29 @@ func (k *Kpture) handleErr() {
 	}
 }
 
-func (k *Kpture) SetupEphemeralContainers() error {
+// func (k *Kpture) SetupProxy(readychan chan struct{}) error {
+
+// }
+
+func (k *Kpture) SetupEphemeralContainers(readychan chan struct{}) error {
+
+	wg := sync.WaitGroup{}
+	wg.Add(len(k.kpturePods))
 	for _, kpturePod := range k.kpturePods {
-		err := kpturePod.CreateDebugContainer(k.client.Clientset)
-		if err != nil {
-			logrus.Error(err)
-			return err
-		}
+		go kpturePod.CreateDebugContainer(k.client.Clientset, k.errChan, readychan, &wg)
 	}
+	wg.Wait()
 	return nil
 }
 
-func (k *Kpture) SetupPortForwarding() error {
+func (k *Kpture) SetupPortForwarding(readychan chan struct{}) error {
+	wg := sync.WaitGroup{}
+	wg.Add(len(k.kpturePods))
 	for _, kpturePod := range k.kpturePods {
-		err := kpturePod.PortForwardAPod(k.client.RestConf)
-		if err != nil {
-			logrus.Error(err)
-			return err
-		}
+		go kpturePod.PortForwardAPod(k.client.RestConf, k.errChan, readychan, &wg)
+
 	}
+	wg.Wait()
 	return nil
 }
 
@@ -167,4 +167,8 @@ func (k *Kpture) HandlePacketsMultipleOutput(dest string) error {
 		}
 	}
 	return nil
+}
+
+func (k *Kpture) PacketChan() chan *PacketCapture {
+	return k.packetChan
 }
