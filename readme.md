@@ -11,3 +11,6 @@
 [![Known Vulnerabilities](https://snyk.io/test/github/gmtstephane/kpture/badge.svg)](https://snyk.io/test/github/gmtstephane/kpture)
 
 [![Known Vulnerabilities](https://snyk.io/test/github/gmtstephane/kpture/badge.svg?targetFile=go.mod&style=flat-square)](https://snyk.io/test/github/gmtstephane/kpture?targetFile=go.mod)
+
+
+[![Known Vulnerabilities](https://snyk.io/test/github/gmtstephane/kpture/badge.svg)](https://snyk.io/test/github/gmtstephane/kpture?targetFile=go.mod)
