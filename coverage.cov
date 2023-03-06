@@ -1,0 +1,629 @@
+
+109     	func(o AgentOpts) AgentOpts {
+110     			o.Device = n
+111     			return o
+112     		}
+
+
+116     	func(o AgentOpts) AgentOpts {
+117     			o.Promiscuous = n
+118     			return o
+119     		}
+
+
+123     	func(o AgentOpts) AgentOpts {
+124     			o.SnapshotLen = n
+125     			return o
+126     		}
+
+
+130     	func(o AgentOpts) AgentOpts {
+131     			o.Timeout = n
+132     			return o
+133     		}
+
+
+137     	func(o AgentOpts) AgentOpts {
+138     			o.SetupTimeout = n
+139     			return o
+140     		}
+
+
+144     	func(o AgentOpts) AgentOpts {
+145     			o.UUID = u
+146     			return o
+147     		}
+
+
+38     	func() {
+39     			for {
+40     				<-readychan
+41     				c++
+42     				w.Text(fmt.Sprintf("Creating debug container %d/%d", c, len(pods)))
+43     			}
+44     		}
+
+
+40     	func(o ProxyOpts) ProxyOpts {
+41     			o.UUID = u
+42     			return o
+43     		}
+
+
+47     	func(o ProxyOpts) ProxyOpts {
+48     			o.SetupTimeout = u
+49     			return o
+50     		}
+
+
+48     	func() {
+49     				createDebugContainer(n, errchan, &wg, h, opts)
+50     				readychan <- true
+51     			}
+
+
+54     	func(o ProxyOpts) ProxyOpts {
+55     			o.ServerPort = u
+56     			return o
+57     		}
+
+
+68     	func() {
+69     			err := forwarder.ForwardPorts()
+70     			if err != nil {
+71     				errchan <- err
+72     			}
+73     		}
+
+
+ 98     	func (a AgentOpts) WithTargetIP(s string) AgentOpts {
+ 99     		a.TargetIP = s
+100     		return a
+101     	}
+
+
+103     	func (a AgentOpts) WithTargetPort(p int) AgentOpts {
+104     		a.TargetPort = p
+105     		return a
+106     	}
+
+
+28     	func GetClient(namespace string) (*KubeClient, error) {
+29     		configFiles := strings.Split(os.Getenv("KUBECONFIG"), ":")
+30     		config := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+31     			&clientcmd.ClientConfigLoadingRules{Precedence: configFiles},
+32     			&clientcmd.ConfigOverrides{})
+33     	
+34     		rawConf, err := config.RawConfig()
+35     		if err != nil {
+36 MISS			return nil, errors.New("could not get raw config: " + err.Error())
+37     		}
+38     	
+39     		restconf, err := config.ClientConfig()
+40     		if err != nil {
+41 MISS			return nil, errors.WithMessage(err, "could not generate clientConfig")
+42     		}
+43     		restconf.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(defaultQPS, defaultBurst)
+44     		clientset, err := kubernetes.NewForConfig(restconf)
+45     		if err != nil {
+46 MISS			return nil, errors.WithMessage(err, "could not create clientset")
+47     		}
+48     	
+49     		if namespace == "" {
+50     			namespace = rawConf.Contexts[rawConf.CurrentContext].Namespace
+51     			if namespace == "" {
+52 MISS				namespace = "default"
+53     			}
+54     		}
+55     		return &KubeClient{
+56     			Namespace: namespace,
+57     			Clientset: clientset,
+58     			RestConf:  restconf,
+59     		}, nil
+60     	}
+
+
+25     	func GetKubeForwarder(
+26     		r *rest.Config,
+27     		path string,
+28     		rch, sch chan struct{},
+29     		proxyport int32,
+30     	) (*portforward.PortForwarder, int, error) {
+31     		port, err := getFreePort()
+32     		if err != nil {
+33 MISS			return nil, 0, err
+34     		}
+35     	
+36     		hostIP := strings.TrimLeft(r.Host, "htps:/")
+37     		transport, upgrader, err := spdy.RoundTripperFor(r)
+38     		if err != nil {
+39 MISS			return nil, 0, err
+40     		}
+41     	
+42     		dialer := spdy.NewDialer(
+43     			upgrader,
+44     			&http.Client{Transport: transport},
+45     			http.MethodPost,
+46     			&url.URL{Scheme: "https", Path: path, Host: hostIP},
+47     		)
+48     	
+49     		fw, err := portforward.New(
+50     			dialer,
+51     			[]string{fmt.Sprintf("%d:%d", port, proxyport)},
+52     			sch,
+53     			rch,
+54     			io.Discard,
+55     			os.Stderr,
+56     		)
+57     		if err != nil {
+58 MISS			log.Println(err)
+59 MISS			return nil, 0, err
+60     		}
+61     	
+62     		return fw, port, nil
+63     	}
+
+
+90     	func LoadAgentOpts(os ...AgentOpt) AgentOpts {
+91     		opts := defaultAgentOpts()
+92     		for _, o := range os {
+93     			opts = o(opts)
+94     		}
+95     		return opts
+96     	}
+
+
+31     	func LoadProxyOpts(os ...ProxyOpt) ProxyOpts {
+32     		opts := defaultProxyOpts()
+33     		for _, o := range os {
+34     			opts = o(opts)
+35     		}
+36     		return opts
+37     	}
+
+
+65     	func PortForward(forwarder Forwarder, readych chan struct{}, timeout time.Duration) error {
+66     		errchan := make(chan error, 1)
+67     	
+68     		go func() {
+69     			err := forwarder.ForwardPorts()
+70     			if err != nil {
+71     				errchan <- err
+72     			}
+73     		}()
+74     	
+75     		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+76     		defer cancel()
+77     		for {
+78     			select {
+79     			case <-ctx.Done():
+80     				return errors.New("timeout waiting for port forward")
+81     			case errForward := <-errchan:
+82     				return errForward
+83     			case <-readych:
+84     				return nil
+85     			}
+86     		}
+87     	}
+
+
+66     	func SelectPods(pods []string, all bool, h PodLister) ([]v1.Pod, error) {
+67     		podList, err := h.List(context.Background(), metav1.ListOptions{})
+68     		if err != nil {
+69     			return nil, err
+70     		}
+71     		if all {
+72     			return podList.Items, nil
+73     		}
+74     		resp := []v1.Pod{}
+75     		for _, pod := range podList.Items {
+76     			if isInArray(pod.Name, pods) {
+77     				resp = append(resp, pod)
+78     			}
+79     		}
+80     		return resp, nil
+81     	}
+
+
+28     	func SetupEphemeralContainers(pods []v1.Pod, h KubeEphemeralHandler, opts AgentOpts) error {
+29     		wg := sync.WaitGroup{}
+30     		errchan := make(chan error, len(pods))
+31     		wg.Add(len(pods))
+32     	
+33     		readychan := make(chan bool, len(pods))
+34     		c := 0
+35     		w := wow.New(os.Stderr, spin.Get(spin.GrowHorizontal), fmt.Sprintf("Creating debug container %d/%d", c, len(pods)))
+36     		w.Start()
+37     		defer w.Stop()
+38     		go func() {
+39     			for {
+40     				<-readychan
+41     				c++
+42     				w.Text(fmt.Sprintf("Creating debug container %d/%d", c, len(pods)))
+43     			}
+44     		}()
+45     	
+46     		for _, kpturePod := range pods {
+47     			n := kpturePod
+48     			go func() {
+49     				createDebugContainer(n, errchan, &wg, h, opts)
+50     				readychan <- true
+51     			}()
+52     		}
+53     		wg.Wait()
+54     		w.PersistWith(spin.Spinner{}, fmt.Sprintf("Created debug container %d/%d", len(pods), len(pods)))
+55     		log.Println("All debug containers are ready")
+56     		for len(errchan) > 0 {
+57     			err := <-errchan
+58     			if err != nil {
+59     				logrus.Error(err)
+60     				return err
+61     			}
+62     		}
+63     		return nil
+64     	}
+
+
+21     	func SetupProxy(h KubeProxyHandler, opts ProxyOpts) (string, error) {
+22     		name := "kpture-proxy-" + opts.UUID
+23     		pod := v1.Pod{
+24     			ObjectMeta: metav1.ObjectMeta{
+25     				Name:      name,
+26     				Namespace: "default",
+27     			},
+28     			Spec: v1.PodSpec{
+29     				Containers: []v1.Container{
+30     					{
+31     						Name:            "kpture-proxy",
+32     						ImagePullPolicy: v1.PullAlways,
+33     						Image:           "ghcr.io/gmtstephane/kpture_proxy:latest",
+34     						Args:            []string{"proxy"},
+35     						Ports: []v1.ContainerPort{
+36     							{
+37     								Name:          "grpc",
+38     								ContainerPort: opts.ServerPort,
+39     								Protocol:      v1.ProtocolTCP,
+40     							},
+41     						},
+42     						LivenessProbe: &v1.Probe{
+43     							InitialDelaySeconds: livenessProbeInitialDelay,
+44     							ProbeHandler: v1.ProbeHandler{
+45     								GRPC: &v1.GRPCAction{
+46     									Port: opts.ServerPort,
+47     								},
+48     							},
+49     						},
+50     						ReadinessProbe: &v1.Probe{
+51     							InitialDelaySeconds: readinessProbeInitialDelay,
+52     							ProbeHandler: v1.ProbeHandler{
+53     								GRPC: &v1.GRPCAction{
+54     									Port:    opts.ServerPort,
+55     									Service: nil,
+56     								},
+57     							},
+58     						},
+59     					},
+60     				},
+61     			},
+62     		}
+63     		_, err := h.Create(context.TODO(), &pod, metav1.CreateOptions{})
+64     		if err != nil {
+65     			return "", err
+66     		}
+67     	
+68     		ctx, cancel := context.WithTimeout(context.Background(), opts.SetupTimeout)
+69     		defer cancel()
+70     		for {
+71     			select {
+72     			case <-ctx.Done():
+73     				return "", ctx.Err()
+74     			default:
+75     				j, errgetPod := h.Get(context.Background(), name, metav1.GetOptions{})
+76     				if errgetPod != nil {
+77     					return "", errgetPod
+78     				}
+79     				if j.Status.Phase == v1.PodRunning {
+80     					return j.Status.PodIP, nil
+81     				}
+82     			}
+83     		}
+84     	}
+
+
+86     	func TearDownProxy(id string, h KubeProxyHandler) error {
+87     		return h.Delete(context.Background(), "kpture-proxy-"+id, metav1.DeleteOptions{})
+88     	}
+
+
+129     	func WithAgentCaptureTimeOut(n time.Duration) AgentOpt {
+130     		return func(o AgentOpts) AgentOpts {
+131     			o.Timeout = n
+132     			return o
+133     		}
+134     	}
+
+
+108     	func WithAgentDevice(n string) AgentOpt {
+109     		return func(o AgentOpts) AgentOpts {
+110     			o.Device = n
+111     			return o
+112     		}
+113     	}
+
+
+115     	func WithAgentPromiscuous(n bool) AgentOpt {
+116     		return func(o AgentOpts) AgentOpts {
+117     			o.Promiscuous = n
+118     			return o
+119     		}
+120     	}
+
+
+136     	func WithAgentSetupTimeOut(n time.Duration) AgentOpt {
+137     		return func(o AgentOpts) AgentOpts {
+138     			o.SetupTimeout = n
+139     			return o
+140     		}
+141     	}
+
+
+122     	func WithAgentSnapLen(n int32) AgentOpt {
+123     		return func(o AgentOpts) AgentOpts {
+124     			o.SnapshotLen = n
+125     			return o
+126     		}
+127     	}
+
+
+143     	func WithAgentUUID(u string) AgentOpt {
+144     		return func(o AgentOpts) AgentOpts {
+145     			o.UUID = u
+146     			return o
+147     		}
+148     	}
+
+
+53     	func WithProxyServerPort(u int32) ProxyOpt {
+54     		return func(o ProxyOpts) ProxyOpts {
+55     			o.ServerPort = u
+56     			return o
+57     		}
+58     	}
+
+
+46     	func WithProxySetupTimeout(u time.Duration) ProxyOpt {
+47     		return func(o ProxyOpts) ProxyOpts {
+48     			o.SetupTimeout = u
+49     			return o
+50     		}
+51     	}
+
+
+39     	func WithProxyUUID(u string) ProxyOpt {
+40     		return func(o ProxyOpts) ProxyOpts {
+41     			o.UUID = u
+42     			return o
+43     		}
+44     	}
+
+
+ 66     	func createDebugContainer(pod v1.Pod, errchan chan error, wg *sync.WaitGroup, h KubeEphemeralHandler, opts AgentOpts) {
+ 67     		defer wg.Done()
+ 68     		err := injectContainer(pod, h, opts, opts.UUID)
+ 69     		if err != nil {
+ 70     			errchan <- err
+ 71     			return
+ 72     		}
+ 73     	
+ 74     		// wait for the debug container to be ready by polling because watch is not implemented for ephemeral containers
+ 75     		ctx, cancel := context.WithTimeout(context.Background(), opts.SetupTimeout)
+ 76     		defer cancel()
+ 77     		for {
+ 78     			select {
+ 79     			case <-ctx.Done():
+ 80     				errchan <- errors.New("timeout waiting for debug container to be ready")
+ 81     				return
+ 82     			default:
+ 83     				pod, errGetPod := h.Get(context.Background(), pod.Name, metav1.GetOptions{})
+ 84     				if errGetPod != nil {
+ 85 MISS					errchan <- errGetPod
+ 86 MISS					return
+ 87     				}
+ 88     				for _, eph := range pod.Status.EphemeralContainerStatuses {
+ 89     					if eph.Name == "kpture-"+opts.UUID {
+ 90     						if eph.State.Running != nil {
+ 91     							// log.Println("debug container is Running for pod", pod.Name)
+ 92     							return
+ 93     						}
+ 94     					}
+ 95     				}
+ 96     				time.Sleep(defaultPolling)
+ 97     			}
+ 98     		}
+ 99     	}
+
+
+119     	func debugContainer(pod *v1.Pod, name string, opts AgentOpts) *v1.Pod {
+120     		args := []string{
+121     			"agent",
+122     			fmt.Sprintf("-d%s", opts.Device),
+123     			fmt.Sprintf("-t%s", opts.TargetIP),
+124     			fmt.Sprintf("-l%d", opts.SnapshotLen),
+125     			fmt.Sprintf("-p%d", opts.TargetPort),
+126     		}
+127     		ec := &v1.EphemeralContainer{
+128     			EphemeralContainerCommon: v1.EphemeralContainerCommon{
+129     				Name:            name,
+130     				Args:            args,
+131     				Image:           "ghcr.io/gmtstephane/kpture:latest",
+132     				ImagePullPolicy: v1.PullAlways,
+133     			},
+134     			TargetContainerName: pod.Spec.Containers[0].Name,
+135     		}
+136     		copied := pod.DeepCopy()
+137     		copied.Spec.EphemeralContainers = append(copied.Spec.EphemeralContainers, *ec)
+138     		return copied
+139     	}
+
+
+80     	func defaultAgentOpts() AgentOpts {
+81     		return AgentOpts{
+82     			SnapshotLen:  agentDdefaultSnapLen,
+83     			Promiscuous:  agentDefaultPromiscuous,
+84     			Device:       agentDefaultDevice,
+85     			Timeout:      agentDefaultTimeout,
+86     			SetupTimeout: agentDefaultSetupTimeout,
+87     		}
+88     	}
+
+
+24     	func defaultProxyOpts() ProxyOpts {
+25     		return ProxyOpts{
+26     			ServerPort:   proxyDefaultServerPort,
+27     			SetupTimeout: proxyDefaultSetupTimeout,
+28     		}
+29     	}
+
+
+ 90     	func getFreePort() (int, error) {
+ 91     		addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
+ 92     		if err != nil {
+ 93 MISS			return 0, err
+ 94     		}
+ 95     	
+ 96     		l, err := net.ListenTCP("tcp", addr)
+ 97     		if err != nil {
+ 98 MISS			return 0, err
+ 99     		}
+100     		defer l.Close()
+101     		return l.Addr().(*net.TCPAddr).Port, nil
+102     	}
+
+
+101     	func injectContainer(pod v1.Pod, h KubeEphemeralHandler, opts AgentOpts, id string) error {
+102     		// get the pod to make sure we have the latest version
+103     		// otherwise we might get a conflict error
+104     		syncpod, err := h.Get(context.Background(), pod.Name, metav1.GetOptions{})
+105     		if err != nil {
+106     			return err
+107     		}
+108     	
+109     		debugContainer := debugContainer(syncpod, "kpture-"+id, opts)
+110     	
+111     		_, err = h.UpdateEphemeralContainers(context.Background(), pod.Name, debugContainer, metav1.UpdateOptions{})
+112     		if err != nil {
+113     			return err
+114     		}
+115     	
+116     		return nil
+117     	}
+
+
+83     	func isInArray(s string, array []string) bool {
+84     		for _, a := range array {
+85     			if a == s {
+86     				return true
+87     			}
+88     		}
+89     		return false
+90     	}
+
+
+60     	func() {
+61     			<-s.ctx.Done()
+62     			logrus.Info("Context is Done")
+63     			if err := packetStream.Send(&capture.Empty{}); err != nil {
+64 MISS				logrus.Error(err)
+65     			}
+66     		}
+
+
+29     	func NewProxyServer(bufferSize int, cleanup func(wg *sync.WaitGroup, cancel context.CancelFunc)) *Proxy {
+30     		s := Proxy{
+31     			packets:   make(chan *capture.Packet, bufferSize),
+32     			readypods: make([]*capture.Pod, 0),
+33     			started:   false,
+34     			cleanup:   cleanup,
+35     			mu:        sync.Mutex{},
+36     			wg:        &sync.WaitGroup{},
+37     		}
+38     		s.ctx, s.cancel = context.WithCancel(context.Background())
+39     		return &s
+40     	}
+
+
+54     	func (s *Proxy) AddPacket(packetStream capture.AgentService_AddPacketServer) error {
+55     		logrus.Info("AddPacket")
+56     	
+57     		s.wg.Add(1)
+58     		defer s.wg.Done()
+59     	
+60     		go func() {
+61     			<-s.ctx.Done()
+62     			logrus.Info("Context is Done")
+63     			if err := packetStream.Send(&capture.Empty{}); err != nil {
+64     				logrus.Error(err)
+65     			}
+66     		}()
+67     	
+68     		for {
+69     			packet, err := packetStream.Recv()
+70     			if err != nil {
+71     				if errors.Is(err, io.EOF) {
+72 MISS					return nil
+73     				}
+74     				return status.Error(codes.Internal, err.Error())
+75     			}
+76     	
+77     			if s.hasStarted() {
+78     				select {
+79     				case s.packets <- packet:
+80     				default:
+81 MISS					logrus.Error("buffer full")
+82     				}
+83     			}
+84     		}
+85     	}
+
+
+ 92     	func (s *Proxy) GetPackets(in *capture.Empty, stream capture.ClientService_GetPacketsServer) error {
+ 93     		logrus.Info("GetPackets")
+ 94     		s.setStarted()
+ 95     		for {
+ 96     			select {
+ 97     			case <-stream.Context().Done():
+ 98     				logrus.Info("client stopped connexion, cleaning up...")
+ 99     				s.cleanup(s.wg, s.cancel)
+100     				return nil
+101     			case p := <-s.packets:
+102     				err := stream.Send(p)
+103     				if err != nil {
+104 MISS					if errors.Is(err, io.EOF) {
+105 MISS						return nil
+106     					}
+107 MISS					return status.Error(codes.Internal, err.Error())
+108     				}
+109     			}
+110     		}
+111     	}
+
+
+87     	func (s *Proxy) Ready(ctx context.Context, pod *capture.Pod) (*capture.Empty, error) {
+88     		s.readypods = append(s.readypods, pod)
+89     		return &capture.Empty{}, nil
+90     	}
+
+
+42     	func (s *Proxy) hasStarted() bool {
+43     		s.mu.Lock()
+44     		defer s.mu.Unlock()
+45     		return s.started
+46     	}
+
+
+48     	func (s *Proxy) setStarted() {
+49     		s.mu.Lock()
+50     		defer s.mu.Unlock()
+51     		s.started = true
+52     	}
+
