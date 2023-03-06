@@ -16,6 +16,7 @@ import (
 type Proxy struct {
 	packets   chan *capture.Packet
 	started   bool
+	mu        sync.Mutex
 	cleanup   func(wg *sync.WaitGroup, cancel context.CancelFunc)
 	readypods []*capture.Pod
 	wg        *sync.WaitGroup
@@ -31,10 +32,23 @@ func NewProxyServer(bufferSize int, cleanup func(wg *sync.WaitGroup, cancel cont
 		readypods: make([]*capture.Pod, 0),
 		started:   false,
 		cleanup:   cleanup,
+		mu:        sync.Mutex{},
 		wg:        &sync.WaitGroup{},
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	return &s
+}
+
+func (s *Proxy) hasStarted() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.started
+}
+
+func (s *Proxy) setStarted() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.started = true
 }
 
 func (s *Proxy) AddPacket(packetStream capture.AgentService_AddPacketServer) error {
@@ -44,13 +58,10 @@ func (s *Proxy) AddPacket(packetStream capture.AgentService_AddPacketServer) err
 	defer s.wg.Done()
 
 	go func() {
-		for {
-			<-s.ctx.Done()
-			logrus.Info("Context is Done")
-			if err := packetStream.Send(&capture.Empty{}); err != nil {
-				logrus.Error(err)
-				return
-			}
+		<-s.ctx.Done()
+		logrus.Info("Context is Done")
+		if err := packetStream.Send(&capture.Empty{}); err != nil {
+			logrus.Error(err)
 		}
 	}()
 
@@ -63,7 +74,7 @@ func (s *Proxy) AddPacket(packetStream capture.AgentService_AddPacketServer) err
 			return status.Error(codes.Internal, err.Error())
 		}
 
-		if s.started {
+		if s.hasStarted() {
 			select {
 			case s.packets <- packet:
 			default:
@@ -80,7 +91,7 @@ func (s *Proxy) Ready(ctx context.Context, pod *capture.Pod) (*capture.Empty, er
 
 func (s *Proxy) GetPackets(in *capture.Empty, stream capture.ClientService_GetPacketsServer) error {
 	logrus.Info("GetPackets")
-	s.started = true
+	s.setStarted()
 	for {
 		select {
 		case <-stream.Context().Done():
