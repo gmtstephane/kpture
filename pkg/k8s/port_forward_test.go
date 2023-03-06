@@ -40,6 +40,12 @@ func (m *mockForwarder) getErr() bool {
 	return m.Err
 }
 
+func (m *mockForwarder) setErr(b bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.Err = b
+}
+
 func (m *mockForwarder) ForwardPorts() error {
 	if m.getErr() {
 		return errors.New("Error forwarding pod")
@@ -61,7 +67,7 @@ func TestPortForward(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Port forward with error
-	fw.Err = true
+	fw.setErr(true)
 	ch = make(chan struct{}, 1)
 	err = PortForward(fw, ch, 1*time.Second)
 	assert.Error(t, err)
