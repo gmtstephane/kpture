@@ -3,6 +3,7 @@ package k8s
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -29,18 +30,25 @@ func TestGetKubeForwarder(t *testing.T) {
 }
 
 type mockForwarder struct {
+	mu  sync.Mutex
 	Err bool
 }
 
+func (m *mockForwarder) getErr() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.Err
+}
+
 func (m *mockForwarder) ForwardPorts() error {
-	if m.Err {
+	if m.getErr() {
 		return errors.New("Error forwarding pod")
 	}
 	return nil
 }
 
 func TestPortForward(t *testing.T) {
-	fw := &mockForwarder{Err: false}
+	fw := &mockForwarder{Err: false, mu: sync.Mutex{}}
 	ch := make(chan struct{}, 1)
 
 	// PortForward with timeout
