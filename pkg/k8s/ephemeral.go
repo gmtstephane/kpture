@@ -106,7 +106,7 @@ func injectContainer(pod v1.Pod, h KubeEphemeralHandler, opts AgentOpts, id stri
 		return err
 	}
 
-	debugContainer := debugContainer(syncpod, "kpture-"+id, opts)
+	debugContainer := debugPod(syncpod, "kpture-"+id, opts)
 
 	_, err = h.UpdateEphemeralContainers(context.Background(), pod.Name, debugContainer, metav1.UpdateOptions{})
 	if err != nil {
@@ -116,7 +116,7 @@ func injectContainer(pod v1.Pod, h KubeEphemeralHandler, opts AgentOpts, id stri
 	return nil
 }
 
-func debugContainer(pod *v1.Pod, name string, opts AgentOpts) *v1.Pod {
+func debugPod(pod *v1.Pod, name string, opts AgentOpts) *v1.Pod {
 	args := []string{
 		"agent",
 		fmt.Sprintf("-d%s", opts.Device),

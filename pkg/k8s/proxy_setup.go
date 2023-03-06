@@ -27,36 +27,7 @@ func SetupProxy(h KubeProxyHandler, opts ProxyOpts) (string, error) {
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
-				{
-					Name:            "kpture-proxy",
-					ImagePullPolicy: v1.PullAlways,
-					Image:           "ghcr.io/gmtstephane/kpture_proxy:latest",
-					Args:            []string{"proxy"},
-					Ports: []v1.ContainerPort{
-						{
-							Name:          "grpc",
-							ContainerPort: opts.ServerPort,
-							Protocol:      v1.ProtocolTCP,
-						},
-					},
-					LivenessProbe: &v1.Probe{
-						InitialDelaySeconds: livenessProbeInitialDelay,
-						ProbeHandler: v1.ProbeHandler{
-							GRPC: &v1.GRPCAction{
-								Port: opts.ServerPort,
-							},
-						},
-					},
-					ReadinessProbe: &v1.Probe{
-						InitialDelaySeconds: readinessProbeInitialDelay,
-						ProbeHandler: v1.ProbeHandler{
-							GRPC: &v1.GRPCAction{
-								Port:    opts.ServerPort,
-								Service: nil,
-							},
-						},
-					},
-				},
+				debugContainer(opts),
 			},
 		},
 	}
@@ -85,4 +56,37 @@ func SetupProxy(h KubeProxyHandler, opts ProxyOpts) (string, error) {
 
 func TearDownProxy(id string, h KubeProxyHandler) error {
 	return h.Delete(context.Background(), "kpture-proxy-"+id, metav1.DeleteOptions{})
+}
+
+func debugContainer(opts ProxyOpts) v1.Container {
+	return v1.Container{
+		Name:            "kpture-proxy",
+		ImagePullPolicy: v1.PullAlways,
+		Image:           "ghcr.io/gmtstephane/kpture_proxy:latest",
+		Args:            []string{"proxy"},
+		Ports: []v1.ContainerPort{
+			{
+				Name:          "grpc",
+				ContainerPort: opts.ServerPort,
+				Protocol:      v1.ProtocolTCP,
+			},
+		},
+		LivenessProbe: &v1.Probe{
+			InitialDelaySeconds: livenessProbeInitialDelay,
+			ProbeHandler: v1.ProbeHandler{
+				GRPC: &v1.GRPCAction{
+					Port: opts.ServerPort,
+				},
+			},
+		},
+		ReadinessProbe: &v1.Probe{
+			InitialDelaySeconds: readinessProbeInitialDelay,
+			ProbeHandler: v1.ProbeHandler{
+				GRPC: &v1.GRPCAction{
+					Port:    opts.ServerPort,
+					Service: nil,
+				},
+			},
+		},
+	}
 }
