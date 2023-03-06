@@ -29,6 +29,8 @@ jobs:
         run: ./cc-reporter after-build -t gocov -p github.com/gmtstephane/kpture
       - name: Run Snyk to check for vulnerabilities
         uses: snyk/actions/golang@master
+        with:
+          command: monitor
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
