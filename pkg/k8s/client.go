@@ -15,24 +15,15 @@ import (
 )
 
 type KubeClient struct {
-	Clientset PodInterface
-	// Clientset *kubernetes.Clientset
+	Clientset *kubernetes.Clientset
 	RestConf  *rest.Config
 	Namespace string
 }
 
-type PodInterface interface {
-	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
-	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.Pod, error)
-	List(ctx context.Context, opts metav1.ListOptions) (*v1.PodList, error)
-	UpdateEphemeralContainers(ctx context.Context, podName string, pod *v1.Pod, opts metav1.UpdateOptions) (*v1.Pod, error)
-	Create(ctx context.Context, pod *v1.Pod, opts metav1.CreateOptions) (*v1.Pod, error)
-}
-
-type PodDescriptor struct {
-	Name      string
-	Namespace string
-}
+const (
+	defaultQPS   = 40
+	defaultBurst = 80
+)
 
 func GetClient(namespace string) (*KubeClient, error) {
 	configFiles := strings.Split(os.Getenv("KUBECONFIG"), ":")
@@ -49,7 +40,7 @@ func GetClient(namespace string) (*KubeClient, error) {
 	if err != nil {
 		return nil, errors.WithMessage(err, "could not generate clientConfig")
 	}
-	restconf.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(40, 80)
+	restconf.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(defaultQPS, defaultBurst)
 	clientset, err := kubernetes.NewForConfig(restconf)
 	if err != nil {
 		return nil, errors.WithMessage(err, "could not create clientset")
@@ -63,35 +54,37 @@ func GetClient(namespace string) (*KubeClient, error) {
 	}
 	return &KubeClient{
 		Namespace: namespace,
-		Clientset: clientset.CoreV1().Pods(namespace),
+		Clientset: clientset,
 		RestConf:  restconf,
 	}, nil
 }
 
-func (k *KubeClient) SelectPods(pods []string, all bool) ([]PodDescriptor, error) {
-	podDescriptors := []PodDescriptor{}
+type PodLister interface {
+	List(ctx context.Context, opts metav1.ListOptions) (*v1.PodList, error)
+}
+
+func SelectPods(pods []string, all bool, h PodLister) ([]v1.Pod, error) {
+	podList, err := h.List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
 	if all {
-		pods, err := k.Clientset.List(context.Background(), metav1.ListOptions{})
-		if err != nil {
-			return nil, err
-		}
-		for _, pod := range pods.Items {
-			podDescriptors = append(podDescriptors, PodDescriptor{
-				Name:      pod.Name,
-				Namespace: pod.Namespace,
-			})
-		}
-		return podDescriptors, nil
+		return podList.Items, nil
 	}
-	for _, pod := range pods {
-		kpod, err := k.Clientset.Get(context.Background(), pod, metav1.GetOptions{})
-		if err != nil {
-			return nil, err
+	resp := []v1.Pod{}
+	for _, pod := range podList.Items {
+		if isInArray(pod.Name, pods) {
+			resp = append(resp, pod)
 		}
-		podDescriptors = append(podDescriptors, PodDescriptor{
-			Name:      kpod.Name,
-			Namespace: kpod.Namespace,
-		})
 	}
-	return podDescriptors, nil
+	return resp, nil
+}
+
+func isInArray(s string, array []string) bool {
+	for _, a := range array {
+		if a == s {
+			return true
+		}
+	}
+	return false
 }

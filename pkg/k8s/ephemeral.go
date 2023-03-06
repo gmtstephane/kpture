@@ -4,29 +4,55 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"sync"
 	"time"
 
-	"github.com/gmtstephane/kpture/pkg/kpture"
+	"github.com/gernest/wow"
+	"github.com/gernest/wow/spin"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	defaultPullTimeout = 30
+	defaultPolling = time.Second
 )
 
-func (k *KubeClient) SetupEphemeralContainers(pods []PodDescriptor, opts kpture.Options) error {
+type KubeEphemeralHandler interface {
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.Pod, error)
+	UpdateEphemeralContainers(ctx context.Context, podName string, pod *v1.Pod, opts metav1.UpdateOptions) (*v1.Pod, error)
+}
+
+func SetupEphemeralContainers(pods []v1.Pod, h KubeEphemeralHandler, opts AgentOpts) error {
 	wg := sync.WaitGroup{}
 	errchan := make(chan error, len(pods))
 	wg.Add(len(pods))
+
+	readychan := make(chan bool, len(pods))
+	c := 0
+	w := wow.New(os.Stderr, spin.Get(spin.GrowHorizontal), fmt.Sprintf("Creating debug container %d/%d", c, len(pods)))
+	w.Start()
+	defer w.Stop()
+	go func() {
+		for {
+			<-readychan
+			c++
+			w.Text(fmt.Sprintf("Creating debug container %d/%d", c, len(pods)))
+		}
+	}()
+
 	for _, kpturePod := range pods {
-		go k.CreateDebugContainer(kpturePod.Name, errchan, &wg, opts)
+		n := kpturePod
+		go func() {
+			createDebugContainer(n, errchan, &wg, h, opts)
+			readychan <- true
+		}()
 	}
 	wg.Wait()
-	// empty the error channel
+	w.PersistWith(spin.Spinner{}, fmt.Sprintf("Created debug container %d/%d", len(pods), len(pods)))
+	log.Println("All debug containers are ready")
 	for len(errchan) > 0 {
 		err := <-errchan
 		if err != nil {
@@ -37,16 +63,16 @@ func (k *KubeClient) SetupEphemeralContainers(pods []PodDescriptor, opts kpture.
 	return nil
 }
 
-func (k *KubeClient) CreateDebugContainer(name string, errchan chan error, wg *sync.WaitGroup, opts kpture.Options) {
+func createDebugContainer(pod v1.Pod, errchan chan error, wg *sync.WaitGroup, h KubeEphemeralHandler, opts AgentOpts) {
 	defer wg.Done()
-	err := k.InjectContainer(name, opts)
+	err := injectContainer(pod, h, opts, opts.UUID)
 	if err != nil {
 		errchan <- err
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(defaultPullTimeout)*time.Second)
-
+	// wait for the debug container to be ready by polling because watch is not implemented for ephemeral containers
+	ctx, cancel := context.WithTimeout(context.Background(), opts.SetupTimeout)
 	defer cancel()
 	for {
 		select {
@@ -54,7 +80,7 @@ func (k *KubeClient) CreateDebugContainer(name string, errchan chan error, wg *s
 			errchan <- errors.New("timeout waiting for debug container to be ready")
 			return
 		default:
-			pod, errGetPod := k.Clientset.Get(context.Background(), name, metav1.GetOptions{})
+			pod, errGetPod := h.Get(context.Background(), pod.Name, metav1.GetOptions{})
 			if errGetPod != nil {
 				errchan <- errGetPod
 				return
@@ -62,66 +88,48 @@ func (k *KubeClient) CreateDebugContainer(name string, errchan chan error, wg *s
 			for _, eph := range pod.Status.EphemeralContainerStatuses {
 				if eph.Name == "kpture-"+opts.UUID {
 					if eph.State.Running != nil {
-						log.Println("debug container is ready for pod", name)
+						// log.Println("debug container is Running for pod", pod.Name)
 						return
 					}
 				}
 			}
-			time.Sleep(1 * time.Second)
+			time.Sleep(defaultPolling)
 		}
 	}
 }
 
-func (k *KubeClient) InjectContainer(name string, opts kpture.Options) error {
-	pod, err := k.Clientset.Get(context.Background(), name, metav1.GetOptions{})
+func injectContainer(pod v1.Pod, h KubeEphemeralHandler, opts AgentOpts, id string) error {
+	// get the pod to make sure we have the latest version
+	// otherwise we might get a conflict error
+	syncpod, err := h.Get(context.Background(), pod.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
 
-	debugContainer := debugContainer(pod, "kpture-"+opts.UUID, opts)
+	debugContainer := debugContainer(syncpod, "kpture-"+id, opts)
 
-	_, err = k.Clientset.UpdateEphemeralContainers(context.Background(), pod.Name, debugContainer, metav1.UpdateOptions{})
+	_, err = h.UpdateEphemeralContainers(context.Background(), pod.Name, debugContainer, metav1.UpdateOptions{})
 	if err != nil {
-		logrus.Error(err)
 		return err
 	}
 
 	return nil
 }
 
-func debugContainer(pod *corev1.Pod, name string, opts kpture.Options) *corev1.Pod {
-	ec := &corev1.EphemeralContainer{
-		EphemeralContainerCommon: corev1.EphemeralContainerCommon{
-			Name: name,
-			Env: []corev1.EnvVar{
-				{
-					Name:  "Kpture_PORT",
-					Value: fmt.Sprintf("%d", opts.Port),
-				},
-				{
-					Name:  "Kpture_DEVICE",
-					Value: opts.Device,
-				},
-				{
-					Name:  "Kpture_SNAPSHOT_LEN",
-					Value: fmt.Sprintf("%d", opts.SnapshotLen),
-				},
-				{
-					Name:  "Kpture_PROMISCUOUS",
-					Value: fmt.Sprintf("%t", opts.Promiscuous),
-				},
-				{
-					Name:  "Kpture_TIMEOUT",
-					Value: fmt.Sprintf("%d", opts.Timeout),
-				},
-				{
-					Name:  "Kpture_PROXY",
-					Value: opts.Proxy,
-				},
-			},
-			Image:                    "ghcr.io/gmtstephane/kpture:latest",
-			ImagePullPolicy:          corev1.PullNever,
-			TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+func debugContainer(pod *v1.Pod, name string, opts AgentOpts) *v1.Pod {
+	args := []string{
+		"agent",
+		fmt.Sprintf("-d%s", opts.Device),
+		fmt.Sprintf("-t%s", opts.TargetIP),
+		fmt.Sprintf("-l%d", opts.SnapshotLen),
+		fmt.Sprintf("-p%d", opts.TargetPort),
+	}
+	ec := &v1.EphemeralContainer{
+		EphemeralContainerCommon: v1.EphemeralContainerCommon{
+			Name:            name,
+			Args:            args,
+			Image:           "ghcr.io/gmtstephane/kpture:latest",
+			ImagePullPolicy: v1.PullAlways,
 		},
 		TargetContainerName: pod.Spec.Containers[0].Name,
 	}

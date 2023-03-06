@@ -1,30 +1,42 @@
 package k8s
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
 )
 
-func (k KubeClient) PortForward(id string) (chan struct{}, int, error) {
+type Forwarder interface {
+	ForwardPorts() error
+}
+
+func GetKubeForwarder(
+	r *rest.Config,
+	path string,
+	rch, sch chan struct{},
+	proxyport int32,
+) (*portforward.PortForwarder, int, error) {
 	port, err := getFreePort()
 	if err != nil {
 		return nil, 0, err
 	}
-	name := "kpture-proxy-" + id
 
-	path := fmt.Sprintf("/api/v1/namespaces/%s/pods/%s/portforward", k.Namespace, name)
-	hostIP := strings.TrimLeft(k.RestConf.Host, "htps:/")
-	transport, upgrader, err := spdy.RoundTripperFor(k.RestConf)
+	hostIP := strings.TrimLeft(r.Host, "htps:/")
+	transport, upgrader, err := spdy.RoundTripperFor(r)
 	if err != nil {
-		return nil, port, err
+		return nil, 0, err
 	}
 
 	dialer := spdy.NewDialer(
@@ -33,32 +45,43 @@ func (k KubeClient) PortForward(id string) (chan struct{}, int, error) {
 		http.MethodPost,
 		&url.URL{Scheme: "https", Path: path, Host: hostIP},
 	)
-	readychan, stopchan, errchan := make(chan struct{}), make(chan struct{}), make(chan error)
+
 	fw, err := portforward.New(
 		dialer,
-		[]string{fmt.Sprintf("%d:%d", port, 10000)},
-		stopchan,
-		readychan,
+		[]string{fmt.Sprintf("%d:%d", port, proxyport)},
+		sch,
+		rch,
 		io.Discard,
 		os.Stderr,
 	)
 	if err != nil {
-		return nil, port, err
+		log.Println(err)
+		return nil, 0, err
 	}
 
+	return fw, port, nil
+}
+
+func PortForward(forwarder Forwarder, readych chan struct{}, timeout time.Duration) error {
+	errchan := make(chan error, 1)
+
 	go func() {
-		err = fw.ForwardPorts()
+		err := forwarder.ForwardPorts()
 		if err != nil {
 			errchan <- err
 		}
 	}()
 
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 	for {
 		select {
+		case <-ctx.Done():
+			return errors.New("timeout waiting for port forward")
 		case errForward := <-errchan:
-			return nil, port, errForward
-		case <-readychan:
-			return stopchan, port, nil
+			return errForward
+		case <-readych:
+			return nil
 		}
 	}
 }

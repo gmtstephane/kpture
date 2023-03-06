@@ -2,7 +2,6 @@ package k8s
 
 import (
 	"context"
-	"time"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -11,11 +10,16 @@ import (
 const (
 	readinessProbeInitialDelay = int32(5)
 	livenessProbeInitialDelay  = int32(10)
-	defaultTimeout             = 10 * time.Second
 )
 
-func (k KubeClient) SetupProxy(id string, port int32) (string, error) {
-	name := "kpture-proxy-" + id
+type KubeProxyHandler interface {
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.Pod, error)
+	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
+	Create(ctx context.Context, pod *v1.Pod, opts metav1.CreateOptions) (*v1.Pod, error)
+}
+
+func SetupProxy(h KubeProxyHandler, opts ProxyOpts) (string, error) {
+	name := "kpture-proxy-" + opts.UUID
 	pod := v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -25,12 +29,13 @@ func (k KubeClient) SetupProxy(id string, port int32) (string, error) {
 			Containers: []v1.Container{
 				{
 					Name:            "kpture-proxy",
-					ImagePullPolicy: v1.PullIfNotPresent,
+					ImagePullPolicy: v1.PullAlways,
 					Image:           "ghcr.io/gmtstephane/kpture_proxy:latest",
+					Args:            []string{"proxy"},
 					Ports: []v1.ContainerPort{
 						{
 							Name:          "grpc",
-							ContainerPort: port,
+							ContainerPort: opts.ServerPort,
 							Protocol:      v1.ProtocolTCP,
 						},
 					},
@@ -38,7 +43,7 @@ func (k KubeClient) SetupProxy(id string, port int32) (string, error) {
 						InitialDelaySeconds: livenessProbeInitialDelay,
 						ProbeHandler: v1.ProbeHandler{
 							GRPC: &v1.GRPCAction{
-								Port: port,
+								Port: opts.ServerPort,
 							},
 						},
 					},
@@ -46,7 +51,7 @@ func (k KubeClient) SetupProxy(id string, port int32) (string, error) {
 						InitialDelaySeconds: readinessProbeInitialDelay,
 						ProbeHandler: v1.ProbeHandler{
 							GRPC: &v1.GRPCAction{
-								Port:    port,
+								Port:    opts.ServerPort,
 								Service: nil,
 							},
 						},
@@ -55,34 +60,29 @@ func (k KubeClient) SetupProxy(id string, port int32) (string, error) {
 			},
 		},
 	}
-	_, err := k.Clientset.Create(context.TODO(), &pod, metav1.CreateOptions{})
+	_, err := h.Create(context.TODO(), &pod, metav1.CreateOptions{})
 	if err != nil {
 		return "", err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), opts.SetupTimeout)
 	defer cancel()
 	for {
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
 		default:
-			j, errgetPod := k.Clientset.Get(context.Background(), name, metav1.GetOptions{})
+			j, errgetPod := h.Get(context.Background(), name, metav1.GetOptions{})
 			if errgetPod != nil {
-				return "", err
+				return "", errgetPod
 			}
-			if j.Status.Phase == "Running" {
+			if j.Status.Phase == v1.PodRunning {
 				return j.Status.PodIP, nil
 			}
 		}
 	}
 }
 
-func (k KubeClient) TearDownProxy(id string) error {
-	name := "kpture-proxy-" + id
-	err := k.Clientset.Delete(context.Background(), name, metav1.DeleteOptions{})
-	if err != nil {
-		return err
-	}
-	return nil
+func TearDownProxy(id string, h KubeProxyHandler) error {
+	return h.Delete(context.Background(), "kpture-proxy-"+id, metav1.DeleteOptions{})
 }

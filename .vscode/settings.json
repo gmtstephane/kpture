@@ -1,0 +1,4 @@
+{
+	"go.buildTags": "proxy,agent,cli",
+	"go.lintTool": "golangci-lint"
+}

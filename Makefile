@@ -1,21 +1,25 @@
 .PHONY: test build
-test:
-	go test -json -timeout 30s ./pkg/kpture -kubeconfig=/Users/stephaneguillemot/.kube/k3s  | gotestfmt
-	go test -json -timeout 30s ./test/e2e/... -kubeconfig=/Users/stephaneguillemot/.kube/k3s  | gotestfmt
-build:
-	mkdir -p ./bin
-	go build -o ./bin/agent cmd/agent/main.go 
-	go build -o ./bin/proxy cmd/proxy/main.go 
 
-docker:
-	docker build  -t ghcr.io/gmtstephane/kpture_proxy:latest . -f Dockerfile.proxy 
-	docker push ghcr.io/gmtstephane/kpture_proxy:latest
-	docker build  -t ghcr.io/gmtstephane/kpture:latest . -f Dockerfile.agent
-	docker push ghcr.io/gmtstephane/kpture:latest
 
+
+## DOCKER Configuration ##
+# build multi plateform proxy and push                             
 buildx_proxy:
-	docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/gmtstephane/kpture_proxy:latest . -f Dockerfile.proxy --push
-buildx_agent:
-	docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/gmtstephane/kpture:latest . -f Dockerfile.agent --push
+	docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/gmtstephane/kpture_proxy:latest . --build-arg BUILDTAG=proxy  --push
 
+# build multi plateform agent and push 
+buildx_agent:
+	docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/gmtstephane/kpture:latest . --build-arg BUILDTAG=agent  --push
+
+# build both docker images and push
 buildx: buildx_proxy buildx_agent
+
+## CLI Configuration ##
+# Install kpture with proxy,cli,agent and generate completion script (path must be in $fpath for zsh)   
+install :
+	go install --tags proxy,cli,agent 
+	kpture completion zsh > ~/.oh-my-zsh/completions/_kpture
+
+## RELEASE Configuration  ##
+release:
+	goreleaser release --config ./ci/.goreleaser.yaml --snapshot --clean

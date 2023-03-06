@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"sync"
 
-	"github.com/gmtstephane/kpture/api/capture"
+	capture "github.com/gmtstephane/kpture/api/kpture"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 
@@ -17,26 +16,28 @@ import (
 type Proxy struct {
 	packets   chan *capture.Packet
 	started   bool
+	cleanup   func(wg *sync.WaitGroup, cancel context.CancelFunc)
 	readypods []*capture.Pod
 	wg        *sync.WaitGroup
 	ctx       context.Context
 	cancel    context.CancelFunc
-	capture.UnimplementedPacketsReceiverServer
-	capture.UnimplementedPackgetGetterServer
+	capture.UnimplementedAgentServiceServer
+	capture.UnimplementedClientServiceServer
 }
 
-func NewProxyServer() (*Proxy, error) {
+func NewProxyServer(bufferSize int, cleanup func(wg *sync.WaitGroup, cancel context.CancelFunc)) *Proxy {
 	s := Proxy{
-		packets:   make(chan *capture.Packet, 1500),
+		packets:   make(chan *capture.Packet, bufferSize),
 		readypods: make([]*capture.Pod, 0),
 		started:   false,
+		cleanup:   cleanup,
 		wg:        &sync.WaitGroup{},
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-	return &s, nil
+	return &s
 }
 
-func (s *Proxy) AddPacket(packetStream capture.PacketsReceiver_AddPacketServer) error {
+func (s *Proxy) AddPacket(packetStream capture.AgentService_AddPacketServer) error {
 	logrus.Info("AddPacket")
 
 	s.wg.Add(1)
@@ -44,13 +45,10 @@ func (s *Proxy) AddPacket(packetStream capture.PacketsReceiver_AddPacketServer) 
 
 	go func() {
 		for {
-			select {
-			case <-s.ctx.Done():
-				logrus.Info("Context is Done")
-				if err := packetStream.Send(&capture.Empty{}); err != nil {
-					logrus.Error(err)
-					return
-				}
+			<-s.ctx.Done()
+			logrus.Info("Context is Done")
+			if err := packetStream.Send(&capture.Empty{}); err != nil {
+				logrus.Error(err)
 				return
 			}
 		}
@@ -62,7 +60,6 @@ func (s *Proxy) AddPacket(packetStream capture.PacketsReceiver_AddPacketServer) 
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
-			logrus.Error(err)
 			return status.Error(codes.Internal, err.Error())
 		}
 
@@ -81,36 +78,23 @@ func (s *Proxy) Ready(ctx context.Context, pod *capture.Pod) (*capture.Empty, er
 	return &capture.Empty{}, nil
 }
 
-func (s *Proxy) GetPackets(in *capture.Empty, stream capture.PackgetGetter_GetPacketsServer) error {
+func (s *Proxy) GetPackets(in *capture.Empty, stream capture.ClientService_GetPacketsServer) error {
 	logrus.Info("GetPackets")
 	s.started = true
 	for {
 		select {
 		case <-stream.Context().Done():
 			logrus.Info("client stopped connexion, cleaning up...")
-			s.cleanup()
+			s.cleanup(s.wg, s.cancel)
 			return nil
 		case p := <-s.packets:
 			err := stream.Send(p)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
-					logrus.Error("iof")
 					return nil
 				}
-				logrus.Error(err)
 				return status.Error(codes.Internal, err.Error())
 			}
 		}
 	}
-}
-
-func (s *Proxy) cleanup() {
-	logrus.Info("Cleanup")
-	go func() {
-		logrus.Info("Waiting contexts...")
-		s.wg.Wait()
-		logrus.Info("Waiting contexts Done")
-		os.Exit(0)
-	}()
-	s.cancel()
 }
