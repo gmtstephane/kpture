@@ -26,3 +26,4 @@ dist/
 .devspace/
 bin/
 *.pcap
+coverage.txt
