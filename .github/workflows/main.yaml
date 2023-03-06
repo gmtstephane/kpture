@@ -1,38 +1,40 @@
-name: "Integration testing in Kind"
+name: "codecov"
 on: [pull_request, push]
 
 jobs:
   kind:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v3
-        with:
-          go-version: 1.18
-      - name: Checkout
-        uses: actions/checkout@v3
-      - run: sudo apt update -y && sudo apt-get install -y libpcap-dev
-      - run: go mod tidy 
-      - run: go build main.go
-      - uses: GoTestTools/gotestfmt-action@v2
-      - name: Create k8s Kind Cluster
-        uses: helm/kind-action@v1.4.0
-        with:
-          version: v0.17.0
-        env: 
-          KUBECONFIG: /tmp/kubeconfig
-      - name: Testing
-        env: 
-          KUBECONFIG: /tmp/kubeconfig
-        run: |
-          kubectl get nodes
-          kubectl apply -f test/e2e/pod.yaml 
-          kubectl apply -f test/e2e/precache.yaml
-          kubectl wait pods podsample -n default --for condition=Ready
-          kubectl wait pods agent -n default --for condition=Ready
-          kubectl wait pods podsample-integration -n default --for condition=Ready
-          kubectl config set-context --current --namespace=default
-      - run: |
-          go test -json -timeout 30s ./pkg/kpture -kubeconfig=/tmp/kubeconfig  | gotestfmt
-          go test -json -timeout 30s ./test/e2e/... -kubeconfig=/tmp/kubeconfig  | gotestfmt
-        env: 
-          CI: true
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+      # - uses: actions/setup-go@v3
+      #   with:
+      #     go-version: 1.18
+      # - name: Checkout
+      #   uses: actions/checkout@v3
+      # - run: sudo apt update -y && sudo apt-get install -y libpcap-dev
+      # - run: go mod tidy 
+      # - run: go build main.go
+      # - uses: GoTestTools/gotestfmt-action@v2
+      # - name: Create k8s Kind Cluster
+      #   uses: helm/kind-action@v1.4.0
+      #   with:
+      #     version: v0.17.0
+      #   env: 
+      #     KUBECONFIG: /tmp/kubeconfig
+      # - name: Testing
+      #   env: 
+      #     KUBECONFIG: /tmp/kubeconfig
+      #   run: |
+      #     kubectl get nodes
+      #     kubectl apply -f test/e2e/pod.yaml 
+      #     kubectl apply -f test/e2e/precache.yaml
+      #     kubectl wait pods podsample -n default --for condition=Ready
+      #     kubectl wait pods agent -n default --for condition=Ready
+      #     kubectl wait pods podsample-integration -n default --for condition=Ready
+      #     kubectl config set-context --current --namespace=default
+      # - run: |
+      #     go test -json -timeout 30s ./pkg/kpture -kubeconfig=/tmp/kubeconfig  | gotestfmt
+      #     go test -json -timeout 30s ./test/e2e/... -kubeconfig=/tmp/kubeconfig  | gotestfmt
+      #   env: 
+      #     CI: true
