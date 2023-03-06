@@ -4,6 +4,10 @@
 
 ![example branch parameter](https://github.com/gmtstephane/kpture/actions/workflows/main.yaml/badge.svg?branch=feature/setup_ci)
 
-<!-- [![Known Vulnerabilities](https://snyk.io/test/github/gmtstephane/kpture/badge.svg)]
- -->
 
+
+<a href="https://snyk.io/test/github/gmtstephane/kpture">
+
+[![Known Vulnerabilities](https://snyk.io/test/github/gmtstephane/kpture/badge.svg)](https://snyk.io/test/github/gmtstephane/kpture)
+
+[![Known Vulnerabilities](https://snyk.io/test/github/gmtstephane/kpture/badge.svg?targetFile=go.mod&style=flat-square)](https://snyk.io/test/github/gmtstephane/kpture?targetFile=go.mod)
