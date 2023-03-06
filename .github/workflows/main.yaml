@@ -13,7 +13,8 @@ jobs:
       - run: sudo apt update -y && sudo apt-get install -y libpcap-dev
       - run: go mod tidy 
       - name: Run coverage
-        run: go test --tags proxy,cli,agent  -race -coverprofile=coverage.txt -covermode=atomic ./pkg/...      
+        run: go test --tags proxy,cli,agent  -race -coverprofile=coverage.txt -covermode=atomic ./pkg/...    
+      - run : go install github.com/axw/gocov/gocov@latest  
       - name: convert go tests  
         run: gocov convert coverage.txt | gocov annotate - > coverage.cov
       # - name: Upload coverage reports to Codecov
