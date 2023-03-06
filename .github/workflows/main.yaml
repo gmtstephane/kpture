@@ -12,15 +12,17 @@ jobs:
         uses: actions/checkout@v3
       - run: sudo apt update -y && sudo apt-get install -y libpcap-dev
       - run: go mod tidy 
-      - name: Run coverage
-        run: go test --tags proxy,cli,agent  -race -coverprofile=coverage.txt -covermode=atomic ./pkg/...     
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
+      # - name: Run coverage
+      #   run: go test --tags proxy,cli,agent  -race -coverprofile=coverage.txt -covermode=atomic ./pkg/...     
+      # - name: Upload coverage reports to Codecov
+      #   uses: codecov/codecov-action@v3
+      - run: go install github.com/axw/gocov/gocov@latest
       - uses: paambaati/codeclimate-action@v3.2.0
         env:
           CC_TEST_REPORTER_ID: 04170e2f85838116d2cdb06a1c808e358ec86e5a03040871361df9cdad443777
         with:
-          coverageCommand: go test --tags proxy,cli,agent  -race -coverprofile=c.out -covermode=atomic ./pkg/...
+          coverageCommand: gocov test --tags proxy,cli,agent  -race -covermode=atomic ./pkg/... > result.gocov
+          coverageLocations: ${{github.workspace}}/result.gocov:gocov
       # - run: go build main.go
       # - uses: GoTestTools/gotestfmt-action@v2
       # - name: Create k8s Kind Cluster
