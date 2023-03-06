@@ -10,6 +10,7 @@ import (
 )
 
 func TestGetKubeForwarder(t *testing.T) {
+	t.Setenv("KUBECONFIG", "../../ci/samples/kubeconfig")
 	client, err := GetClient("")
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
