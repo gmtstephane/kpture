@@ -18,6 +18,7 @@ jobs:
         run: wget -O cc-reporter https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 && chmod +x cc-reporter
       - name: Prepare code coverage
         run: ./cc-reporter before-build
+      
       - name: Run unit tests
         run: go test --tags proxy,cli,agent  -race -coverprofile=c.out -covermode=atomic ./pkg/...
       - name: Format code coverage
@@ -30,7 +31,7 @@ jobs:
         uses: snyk/actions/golang@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-                
+
       # - run: go build main.go
       # - uses: GoTestTools/gotestfmt-action@v2
       # - name: Create k8s Kind Cluster
