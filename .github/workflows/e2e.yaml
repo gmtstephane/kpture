@@ -1,4 +1,4 @@
-name: 'unit-testing'
+name: 'e2e'
 on:
     push:
         branches:

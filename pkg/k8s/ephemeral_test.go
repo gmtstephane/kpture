@@ -70,6 +70,12 @@ func (k *kubeEphemeralMock) Get(ctx context.Context, name string, opts metav1.Ge
 	}
 }
 
+func (k *kubeEphemeralMock) List(ctx context.Context, opts metav1.ListOptions) (*v1.PodList, error) {
+	return &v1.PodList{
+		Items: []v1.Pod{},
+	}, nil
+}
+
 func (k *kubeEphemeralMock) UpdateEphemeralContainers(
 	ctx context.Context, name string, pod *v1.Pod, opts metav1.UpdateOptions,
 ) (*v1.Pod, error) {
@@ -139,17 +145,6 @@ func Test_createDebugContainer(t *testing.T) {
 	mock.kubeProxyHandlerMockUpdateEphState = updateEphError
 	createDebugContainer(pod, errchan, &wg, mock, opts)
 	time.Sleep(opts.SetupTimeout)
-	errlen = len(errchan)
-	assert.Equal(t, 1, errlen)
-	for len(errchan) > 0 {
-		<-errchan
-	}
-
-	// mock a timeout for the ephemeral container to be ready
-	wg.Add(1)
-	mock.kubeProxyHandlerMockGETState = getOKNoEph
-	mock.kubeProxyHandlerMockUpdateEphState = updateEphOK
-	createDebugContainer(pod, errchan, &wg, mock, opts)
 	errlen = len(errchan)
 	assert.Equal(t, 1, errlen)
 	for len(errchan) > 0 {

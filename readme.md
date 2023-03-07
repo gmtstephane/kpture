@@ -6,9 +6,14 @@
 [![Test Coverage](https://api.codeclimate.com/v1/badges/cc2f36936ff42aa2376d/test_coverage)](https://codeclimate.com/github/gmtstephane/kpture/test_coverage) 
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/gmtstephane/kpture/codeql.yml?label=codeQL&logo=GitHub&logoColor=white )
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/gmtstephane/kpture/unit-tests.yaml?label=unit%20test&logo=GitHub%20Actions&logoColor=white )
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/gmtstephane/kpture/e2e.yaml?label=e2e%20test&logo=GitHub%20Actions&logoColor=white )
 [![Go Report Card](https://goreportcard.com/badge/github.com/gmtstephane/kpture)](https://goreportcard.com/report/github.com/gmtstephane/kpture)
 
+## Description
 Kpture is a simple tool that allows you to capture packets and logs from remote pods in your cluster using ephemeral debug containers injection.
+
+
+<img src="assets/architecture.svg" width="100%" height="200">
 
 ## Installation
 ### Using Go
@@ -31,5 +36,4 @@ kpture packets -p my-pod
 
 
 ##
-<img src="assets/architecture.svg" width="100%">
 <img src="assets/kpture.gif" width="100%">

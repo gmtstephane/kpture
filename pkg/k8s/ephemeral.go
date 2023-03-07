@@ -7,19 +7,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	defaultPolling = time.Second
+	defaultPolling = 300 * time.Millisecond
 )
 
 type KubeEphemeralHandler interface {
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.Pod, error)
 	UpdateEphemeralContainers(ctx context.Context, podName string, pod *v1.Pod, opts metav1.UpdateOptions) (*v1.Pod, error)
+	List(ctx context.Context, opts metav1.ListOptions) (*v1.PodList, error)
 }
 
 func SetupEphemeralContainers(pods []v1.Pod, h KubeEphemeralHandler, opts AgentOpts) error {
@@ -33,7 +33,7 @@ func SetupEphemeralContainers(pods []v1.Pod, h KubeEphemeralHandler, opts AgentO
 		for {
 			<-readychan
 			c++
-			log.Printf("Debug container ready %d/%d", c, len(pods))
+			// log.Printf("Debug container ready %d/%d", c, len(pods))
 		}
 	}()
 
@@ -44,7 +44,70 @@ func SetupEphemeralContainers(pods []v1.Pod, h KubeEphemeralHandler, opts AgentO
 			readychan <- true
 		}()
 	}
+
+	// // wait for the debug container to be ready by polling because watch is not implemented for ephemeral containers
+	// ctx, cancel := context.WithTimeout(context.Background(), opts.SetupTimeout)
+	// defer cancel()
+	// for {
+	// 	select {
+	// 	case <-ctx.Done():
+	// 		errchan <- errors.New("timeout waiting for debug container to be ready")
+	// 		return
+	// 	default:
+	// 		pod, errGetPod := h.Get(context.Background(), pod.Name, metav1.GetOptions{})
+	// 		if errGetPod != nil {
+	// 			errchan <- errGetPod
+	// 			return
+	// 		}
+	// 		for _, eph := range pod.Status.EphemeralContainerStatuses {
+	// 			if eph.Name == "kpture-"+opts.UUID {
+	// 				if eph.State.Running != nil {
+	// 					// log.Println("debug container is Running for pod", pod.Name)
+	// 					return
+	// 				} else if eph.State.Terminated != nil {
+	// 					errchan <- errors.New("Error while setting up container : " + eph.State.Terminated.Message)
+	// 				}
+	// 			}
+	// 		}
+	// 		time.Sleep(defaultPolling)
+	// 	}
+	// }
+
 	wg.Wait()
+
+	// Start a watcher
+	go func() {
+		for {
+			list, err := h.List(context.Background(), metav1.ListOptions{})
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			c := 0
+			for _, pod := range list.Items {
+				if isPodInArray(pod.Name, pods) {
+					for _, eph := range pod.Status.EphemeralContainerStatuses {
+						if eph.Name == "kpture-"+opts.UUID {
+							if eph.State.Running != nil {
+								c++
+								break
+							}
+							if eph.State.Terminated != nil {
+								log.Println("error setting pod " + eph.State.Terminated.Message)
+								return
+							}
+						}
+					}
+				}
+			}
+			if c == len(pods) {
+				log.Println("kubernetes reported all debug pods ready")
+				return
+			}
+			time.Sleep(2 * time.Second)
+		}
+	}()
+
 	// w.PersistWith(spin.Spinner{}, fmt.Sprintf("Created debug container %d/%d", len(pods), len(pods)))
 	// log.Println("All debug containers are ready")
 	for len(errchan) > 0 {
@@ -63,34 +126,6 @@ func createDebugContainer(pod v1.Pod, errchan chan error, wg *sync.WaitGroup, h 
 	if err != nil {
 		errchan <- err
 		return
-	}
-
-	// wait for the debug container to be ready by polling because watch is not implemented for ephemeral containers
-	ctx, cancel := context.WithTimeout(context.Background(), opts.SetupTimeout)
-	defer cancel()
-	for {
-		select {
-		case <-ctx.Done():
-			errchan <- errors.New("timeout waiting for debug container to be ready")
-			return
-		default:
-			pod, errGetPod := h.Get(context.Background(), pod.Name, metav1.GetOptions{})
-			if errGetPod != nil {
-				errchan <- errGetPod
-				return
-			}
-			for _, eph := range pod.Status.EphemeralContainerStatuses {
-				if eph.Name == "kpture-"+opts.UUID {
-					if eph.State.Running != nil {
-						// log.Println("debug container is Running for pod", pod.Name)
-						return
-					} else if eph.State.Terminated != nil {
-						errchan <- errors.New("Error while setting up container : " + eph.State.Terminated.Message)
-					}
-				}
-			}
-			time.Sleep(defaultPolling)
-		}
 	}
 }
 

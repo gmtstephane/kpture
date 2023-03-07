@@ -44,7 +44,7 @@ func (c *agentServiceClient) AddPacket(ctx context.Context, opts ...grpc.CallOpt
 }
 
 type AgentService_AddPacketClient interface {
-	Send(*Packet) error
+	Send(*PacketDescriptor) error
 	Recv() (*Empty, error)
 	grpc.ClientStream
 }
@@ -53,7 +53,7 @@ type agentServiceAddPacketClient struct {
 	grpc.ClientStream
 }
 
-func (x *agentServiceAddPacketClient) Send(m *Packet) error {
+func (x *agentServiceAddPacketClient) Send(m *PacketDescriptor) error {
 	return x.ClientStream.SendMsg(m)
 }
 
@@ -112,7 +112,7 @@ func _AgentService_AddPacket_Handler(srv interface{}, stream grpc.ServerStream) 
 
 type AgentService_AddPacketServer interface {
 	Send(*Empty) error
-	Recv() (*Packet, error)
+	Recv() (*PacketDescriptor, error)
 	grpc.ServerStream
 }
 
@@ -124,8 +124,8 @@ func (x *agentServiceAddPacketServer) Send(m *Empty) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *agentServiceAddPacketServer) Recv() (*Packet, error) {
-	m := new(Packet)
+func (x *agentServiceAddPacketServer) Recv() (*PacketDescriptor, error) {
+	m := new(PacketDescriptor)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func (c *clientServiceClient) GetPackets(ctx context.Context, in *Empty, opts ..
 }
 
 type ClientService_GetPacketsClient interface {
-	Recv() (*Packet, error)
+	Recv() (*PacketDescriptor, error)
 	grpc.ClientStream
 }
 
@@ -212,8 +212,8 @@ type clientServiceGetPacketsClient struct {
 	grpc.ClientStream
 }
 
-func (x *clientServiceGetPacketsClient) Recv() (*Packet, error) {
-	m := new(Packet)
+func (x *clientServiceGetPacketsClient) Recv() (*PacketDescriptor, error) {
+	m := new(PacketDescriptor)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -257,7 +257,7 @@ func _ClientService_GetPackets_Handler(srv interface{}, stream grpc.ServerStream
 }
 
 type ClientService_GetPacketsServer interface {
-	Send(*Packet) error
+	Send(*PacketDescriptor) error
 	grpc.ServerStream
 }
 
@@ -265,7 +265,7 @@ type clientServiceGetPacketsServer struct {
 	grpc.ServerStream
 }
 
-func (x *clientServiceGetPacketsServer) Send(m *Packet) error {
+func (x *clientServiceGetPacketsServer) Send(m *PacketDescriptor) error {
 	return x.ServerStream.SendMsg(m)
 }
 

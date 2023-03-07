@@ -8,10 +8,13 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -24,37 +27,45 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var packetsCmd = &cobra.Command{
 	Use:   "packets",
 	Short: "capture packet from pods",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		log.SetFlags(0)
 		log.SetOutput(os.Stderr)
-		client, err := k8s.GetClient(Namespace)
+		client, err := k8s.GetClient(namespace)
 		if err != nil {
-			log.Println(err)
-			return
+			return err
 		}
 
 		// select the pods to capture
-		pods, err := k8s.SelectPods(args, All, client.Clientset.CoreV1().Pods(client.Namespace))
+		pods, err := k8s.SelectPods(args, all, client.Clientset.CoreV1().Pods(client.Namespace))
 		if err != nil {
-			log.Println(err)
-			return
+			return err
+		}
+
+		if !cmd.Flag("output").Changed && !cmd.Flag("raw").Changed {
+			return errors.New("must provide output and/or raw flag")
 		}
 		kptureID := uuid.New().String()
-		agentOpts := k8s.LoadAgentOpts(k8s.WithAgentUUID(kptureID))
+
+		agentOpts := k8s.LoadAgentOpts(k8s.WithAgentUUID(kptureID), k8s.WithAgentSnapLen(-1))
 		proxyOpts := k8s.LoadProxyOpts(k8s.WithProxyUUID(kptureID))
+
+		writer, err := newpcapWriter(cmd, pods, uint32(agentOpts.SnapshotLen))
+		if err != nil {
+			return err
+		}
 
 		log.Println("Deploying Proxy")
 
 		ip, err := k8s.SetupProxy(client.Clientset.CoreV1().Pods(client.Namespace), proxyOpts)
 		if err != nil {
-			log.Println(err)
-			return
+			return err
 		}
 		agentOpts = agentOpts.WithTargetIP(ip).WithTargetPort(int(proxyOpts.ServerPort))
 
@@ -68,6 +79,7 @@ var packetsCmd = &cobra.Command{
 			<-c
 			log.Println("")
 			tearDown(client, kptureID)
+			writer.cleanup()
 			os.Exit(1)
 		}()
 
@@ -82,30 +94,26 @@ var packetsCmd = &cobra.Command{
 			proxyOpts.ServerPort,
 		)
 		if err != nil {
-			log.Println(err)
-			return
+			return err
 		}
 
 		err = k8s.PortForward(forwarder, readychan, agentOpts.SetupTimeout)
 		if err != nil {
-			log.Println(err)
-			return
+			return err
 		}
 		defer close(stopchan)
 
 		// inject the debug containers
 		err = k8s.SetupEphemeralContainers(pods, client.Clientset.CoreV1().Pods(client.Namespace), agentOpts)
 		if err != nil {
-			log.Println(err)
-			return
+			return err
 		}
 
 		conn, err := grpc.Dial(
 			fmt.Sprintf("%s:%d", "127.0.0.1", port),
 			grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
-			log.Println(err)
-			return
+			return err
 		}
 		defer conn.Close()
 
@@ -113,53 +121,15 @@ var packetsCmd = &cobra.Command{
 
 		packets, err := cli.GetPackets(context.Background(), &capture.Empty{})
 		if err != nil {
-			log.Println(err)
-			return
+			return err
 		}
 
-		if !Raw {
-			counter := 0
-			for {
-				_, errReceive := packets.Recv()
-				if errReceive != nil {
-					log.Println(errReceive)
-					return
-				}
-				counter++
-				log.Println("Captured " + fmt.Sprint(counter) + " packets")
-				if err != nil {
-					log.Println(err)
-					return
-				}
-			}
-
-		} else {
-			pcapwriter := pcapgo.NewWriter(os.Stdout)
-			err = pcapwriter.WriteFileHeader(uint32(agentOpts.SnapshotLen), layers.LinkTypeEthernet)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			for {
-				p, errReceive := packets.Recv()
-				if errReceive != nil {
-					log.Println(errReceive)
-					return
-				}
-
-				err = pcapwriter.WritePacket(gopacket.CaptureInfo{
-					Timestamp:      time.Now(),
-					CaptureLength:  int(p.GetCaptureInfo().GetCaptureLength()),
-					Length:         int(p.GetCaptureInfo().GetLength()),
-					InterfaceIndex: int(p.GetCaptureInfo().GetInterfaceIndex()),
-				}, p.GetData())
-				if err != nil {
-					log.Println(err)
-					return
-				}
-
-			}
+		log.Println("Kpture started, press Ctrl+C to exit")
+		if errWriteCapture := writer.WriteCapture(packets); err != nil {
+			return errWriteCapture
 		}
+
+		return nil
 	},
 
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -193,8 +163,10 @@ var packetsCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(packetsCmd)
-	packetsCmd.Flags().BoolVarP(&All, "all", "a", false, "Capture from all pods in the selected namespace")
-	packetsCmd.Flags().BoolVarP(&Raw, "raw", "r", false, "Print raw packet to stdout (for tshark/wireshark)")
+	packetsCmd.Flags().BoolVarP(&all, "all", "a", false, "Capture from all pods in the selected namespace")
+	packetsCmd.Flags().BoolVarP(&raw, "raw", "r", false, "Print raw packet to stdout (for tshark/wireshark)")
+	packetsCmd.Flags().StringVarP(&output, "output", "o", "random-kpture-id", "output folder")
+	packetsCmd.Flags().BoolVarP(&split, "split", "s", true, "split pcap files per pod")
 }
 
 func tearDown(client *k8s.KubeClient, id string) {
@@ -205,5 +177,127 @@ func tearDown(client *k8s.KubeClient, id string) {
 	}
 }
 
-func Capture() {
+type pcapWriter struct {
+	podMapWriter       map[string]*pcapgo.Writer
+	additionnalWriters []*pcapgo.Writer
+	files              []*os.File
+	snaplen            uint32
+}
+
+func (p *pcapWriter) cleanup() {
+	for _, file := range p.files {
+		if err := file.Close(); err != nil {
+			log.Println(err)
+		}
+	}
+}
+
+func (p *pcapWriter) WriteCapture(
+	stream capture.ClientService_GetPacketsClient,
+) error {
+	for {
+		pktStr, errReceive := stream.Recv()
+		if errReceive != nil {
+			return errReceive
+		}
+		if p.podMapWriter != nil {
+			if w, ok := p.podMapWriter[pktStr.GetName()]; ok {
+				err := w.WritePacket(gopacket.CaptureInfo{
+					Timestamp:      time.Now(),
+					CaptureLength:  int(pktStr.Packet.GetCaptureInfo().GetCaptureLength()),
+					Length:         int(pktStr.Packet.GetCaptureInfo().GetLength()),
+					InterfaceIndex: int(pktStr.Packet.GetCaptureInfo().GetInterfaceIndex()),
+				}, pktStr.Packet.GetData())
+				if err != nil {
+					return err
+				}
+			}
+			for _, additionnal := range p.additionnalWriters {
+				err := additionnal.WritePacket(gopacket.CaptureInfo{
+					Timestamp:      time.Now(),
+					CaptureLength:  int(pktStr.Packet.GetCaptureInfo().GetCaptureLength()),
+					Length:         int(pktStr.Packet.GetCaptureInfo().GetLength()),
+					InterfaceIndex: int(pktStr.Packet.GetCaptureInfo().GetInterfaceIndex()),
+				}, pktStr.Packet.GetData())
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+}
+
+func newpcapWriter(cmd *cobra.Command, pods []corev1.Pod, snaplen uint32) (*pcapWriter, error) {
+	pw := pcapWriter{
+		podMapWriter:       make(map[string]*pcapgo.Writer),
+		additionnalWriters: []*pcapgo.Writer{},
+		files:              []*os.File{},
+		snaplen:            snaplen,
+	}
+
+	if cmd.Flag("output").Changed {
+		err := os.MkdirAll(output, os.ModePerm)
+		if err != nil {
+			return nil, err
+		}
+		if errAddFile := pw.addGlobalFile(filepath.Join(output, "kpture.pcap")); errAddFile != nil {
+			return nil, errAddFile
+		}
+	}
+
+	if cmd.Flag("output").Changed && (split && len(pods) > 1) {
+		if err := pw.buildpodMap(pods); err != nil {
+			return nil, err
+		}
+	}
+
+	if raw {
+		if err := pw.addGlobalWriter(os.Stdout); err != nil {
+			return nil, err
+		}
+	}
+
+	return &pw, nil
+}
+
+func (p *pcapWriter) addGlobalWriter(o io.Writer) error {
+	w := pcapgo.NewWriter(o)
+	err := w.WriteFileHeader(p.snaplen, layers.LinkTypeEthernet)
+	if err != nil {
+		return err
+	}
+	p.additionnalWriters = append(p.additionnalWriters, w)
+	return nil
+}
+
+func (p *pcapWriter) addGlobalFile(path string) error {
+	f, errOpenFile := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666)
+	if errOpenFile != nil {
+		return errOpenFile
+	}
+	if erraddWriter := p.addGlobalWriter(f); erraddWriter != nil {
+		return erraddWriter
+	}
+	p.files = append(p.files, f)
+	return nil
+}
+
+func (p *pcapWriter) buildpodMap(pods []corev1.Pod) error {
+	for _, pod := range pods {
+		file := filepath.Join(output, pod.Name+".pcap")
+		podfile, errOpenPodFile := os.OpenFile(file, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666)
+		if errOpenPodFile != nil {
+			return errOpenPodFile
+		}
+		podwriter := pcapgo.NewWriter(podfile)
+		err := podwriter.WriteFileHeader(p.snaplen, layers.LinkTypeEthernet)
+		if err != nil {
+			return err
+		}
+		p.podMapWriter[pod.Name] = podwriter
+
+		p.files = append(p.files, podfile)
+	}
+
+	return nil
 }

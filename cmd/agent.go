@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	capture "github.com/gmtstephane/kpture/api/kpture"
 	"github.com/gmtstephane/kpture/cmd/utils"
@@ -45,7 +46,10 @@ var agentCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-
+		hostname, err := os.Hostname()
+		if err != nil {
+			return t.TerminationMessage(err)
+		}
 		if proxyTarget == "" {
 			return t.TerminationMessage(errors.New("agentProxyTarget not set"))
 		}
@@ -66,6 +70,11 @@ var agentCmd = &cobra.Command{
 
 		cli := capture.NewAgentServiceClient(conn)
 		packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
+
+		_, err = cli.Ready(context.Background(), &capture.Pod{})
+		if err != nil {
+			return t.TerminationMessage(err)
+		}
 
 		addPacketClient, err := cli.AddPacket(context.Background())
 		if err != nil {
@@ -88,14 +97,18 @@ var agentCmd = &cobra.Command{
 					return t.TerminationMessage(err)
 				}
 				return nil
+
 			case packet := <-packetSource.Packets():
-				err = addPacketClient.Send(&capture.Packet{
-					Data: packet.Data(),
-					CaptureInfo: &capture.CaptureInfo{
-						Timestamp:      packet.Metadata().Timestamp.Unix(),
-						CaptureLength:  int64(packet.Metadata().CaptureLength),
-						Length:         int64(packet.Metadata().Length),
-						InterfaceIndex: int64(packet.Metadata().InterfaceIndex),
+				err = addPacketClient.Send(&capture.PacketDescriptor{
+					Name: hostname,
+					Packet: &capture.Packet{
+						Data: packet.Data(),
+						CaptureInfo: &capture.CaptureInfo{
+							Timestamp:      packet.Metadata().Timestamp.Unix(),
+							CaptureLength:  int64(packet.Metadata().CaptureLength),
+							Length:         int64(packet.Metadata().Length),
+							InterfaceIndex: int64(packet.Metadata().InterfaceIndex),
+						},
 					},
 				})
 				if err != nil {

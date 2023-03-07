@@ -88,3 +88,12 @@ func isInArray(s string, array []string) bool {
 	}
 	return false
 }
+
+func isPodInArray(s string, array []v1.Pod) bool {
+	for _, a := range array {
+		if a.Name == s {
+			return true
+		}
+	}
+	return false
+}

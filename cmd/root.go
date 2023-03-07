@@ -10,11 +10,11 @@ import (
 )
 
 var (
-	Raw       bool
-	File      string
-	Namespace string
-	Pods      []string
-	All       bool
+	raw       bool
+	output    string
+	namespace string
+	all       bool
+	split     bool
 )
 
 // RootCmd represents the base command when called without any subcommands.

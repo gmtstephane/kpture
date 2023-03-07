@@ -33,12 +33,16 @@ message Pod {
   string Namespace = 2;
 }
 
+message PacketDescriptor {
+  string Name = 1;
+  Packet Packet = 2;
+}
 
 service AgentService{
-    rpc AddPacket(stream Packet) returns (stream Empty) {}
+    rpc AddPacket(stream PacketDescriptor) returns (stream Empty) {}
     rpc Ready(Pod) returns (Empty) {}
 }
 
 service ClientService{
-    rpc GetPackets(Empty) returns (stream Packet) {}
+    rpc GetPackets(Empty) returns (stream PacketDescriptor) {}
 }

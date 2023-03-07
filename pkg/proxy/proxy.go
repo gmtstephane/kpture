@@ -14,7 +14,7 @@ import (
 )
 
 type Proxy struct {
-	packets   chan *capture.Packet
+	packets   chan *capture.PacketDescriptor
 	started   bool
 	mu        sync.Mutex
 	cleanup   func(wg *sync.WaitGroup, cancel context.CancelFunc)
@@ -28,7 +28,7 @@ type Proxy struct {
 
 func NewProxyServer(bufferSize int, cleanup func(wg *sync.WaitGroup, cancel context.CancelFunc)) *Proxy {
 	s := Proxy{
-		packets:   make(chan *capture.Packet, bufferSize),
+		packets:   make(chan *capture.PacketDescriptor, bufferSize),
 		readypods: make([]*capture.Pod, 0),
 		started:   false,
 		cleanup:   cleanup,
