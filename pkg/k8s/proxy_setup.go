@@ -61,7 +61,7 @@ func TearDownProxy(id string, h KubeProxyHandler) error {
 func debugContainer(opts ProxyOpts) v1.Container {
 	return v1.Container{
 		Name:            "kpture-proxy",
-		ImagePullPolicy: v1.PullAlways,
+		ImagePullPolicy: v1.PullIfNotPresent,
 		Image:           "ghcr.io/gmtstephane/kpture_proxy:latest",
 		Args:            []string{"proxy"},
 		Ports: []v1.ContainerPort{

@@ -4,12 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"sync"
 	"time"
 
-	"github.com/gernest/wow"
-	"github.com/gernest/wow/spin"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
@@ -32,14 +29,11 @@ func SetupEphemeralContainers(pods []v1.Pod, h KubeEphemeralHandler, opts AgentO
 
 	readychan := make(chan bool, len(pods))
 	c := 0
-	w := wow.New(os.Stderr, spin.Get(spin.GrowHorizontal), fmt.Sprintf("Creating debug container %d/%d", c, len(pods)))
-	w.Start()
-	defer w.Stop()
 	go func() {
 		for {
 			<-readychan
 			c++
-			w.Text(fmt.Sprintf("Creating debug container %d/%d", c, len(pods)))
+			log.Printf("Debug container ready %d/%d", c, len(pods))
 		}
 	}()
 
@@ -51,8 +45,8 @@ func SetupEphemeralContainers(pods []v1.Pod, h KubeEphemeralHandler, opts AgentO
 		}()
 	}
 	wg.Wait()
-	w.PersistWith(spin.Spinner{}, fmt.Sprintf("Created debug container %d/%d", len(pods), len(pods)))
-	log.Println("All debug containers are ready")
+	// w.PersistWith(spin.Spinner{}, fmt.Sprintf("Created debug container %d/%d", len(pods), len(pods)))
+	// log.Println("All debug containers are ready")
 	for len(errchan) > 0 {
 		err := <-errchan
 		if err != nil {
@@ -90,6 +84,8 @@ func createDebugContainer(pod v1.Pod, errchan chan error, wg *sync.WaitGroup, h 
 					if eph.State.Running != nil {
 						// log.Println("debug container is Running for pod", pod.Name)
 						return
+					} else if eph.State.Terminated != nil {
+						errchan <- errors.New("Error while setting up container : " + eph.State.Terminated.Message)
 					}
 				}
 			}
@@ -107,7 +103,6 @@ func injectContainer(pod v1.Pod, h KubeEphemeralHandler, opts AgentOpts, id stri
 	}
 
 	debugContainer := debugPod(syncpod, "kpture-"+id, opts)
-
 	_, err = h.UpdateEphemeralContainers(context.Background(), pod.Name, debugContainer, metav1.UpdateOptions{})
 	if err != nil {
 		return err
@@ -129,7 +124,7 @@ func debugPod(pod *v1.Pod, name string, opts AgentOpts) *v1.Pod {
 			Name:            name,
 			Args:            args,
 			Image:           "ghcr.io/gmtstephane/kpture:latest",
-			ImagePullPolicy: v1.PullAlways,
+			ImagePullPolicy: v1.PullIfNotPresent,
 		},
 		TargetContainerName: pod.Spec.Containers[0].Name,
 	}

@@ -15,8 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gernest/wow"
-	"github.com/gernest/wow/spin"
 	capture "github.com/gmtstephane/kpture/api/kpture"
 	"github.com/gmtstephane/kpture/pkg/k8s"
 	"github.com/google/gopacket"
@@ -121,8 +119,6 @@ var packetsCmd = &cobra.Command{
 
 		if !Raw {
 			counter := 0
-			w := wow.New(os.Stderr, spin.Get(spin.GrowHorizontal), "Captured "+fmt.Sprint(counter)+" packets")
-			w.Start()
 			for {
 				_, errReceive := packets.Recv()
 				if errReceive != nil {
@@ -130,7 +126,7 @@ var packetsCmd = &cobra.Command{
 					return
 				}
 				counter++
-				w.Text("Captured " + fmt.Sprint(counter) + " packets")
+				log.Println("Captured " + fmt.Sprint(counter) + " packets")
 				if err != nil {
 					log.Println(err)
 					return
@@ -207,4 +203,7 @@ func tearDown(client *k8s.KubeClient, id string) {
 	if errteardown != nil {
 		log.Println(errteardown)
 	}
+}
+
+func Capture() {
 }
