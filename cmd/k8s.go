@@ -200,6 +200,11 @@ func (p *pcapWriter) WriteCapture(
 		if errReceive != nil {
 			return errReceive
 		}
+		gop := gopacket.NewPacket(pktStr.Packet.GetData(), layers.LayerTypeEthernet, gopacket.Default)
+		if isArp(gop) || isicmpv6sol(gop) {
+			continue
+		}
+
 		if p.podMapWriter != nil {
 			if w, ok := p.podMapWriter[pktStr.GetName()]; ok {
 				err := w.WritePacket(gopacket.CaptureInfo{
@@ -300,4 +305,47 @@ func (p *pcapWriter) buildpodMap(pods []corev1.Pod) error {
 	}
 
 	return nil
+}
+
+func isArp(packet gopacket.Packet) bool {
+	arpLayer := packet.Layer(layers.LayerTypeARP)
+	if arpLayer == nil {
+		return false
+	}
+
+	arp, ok := arpLayer.(*layers.ARP)
+	if !ok {
+		return false
+	}
+
+	if arp.Operation != layers.ARPRequest || len(arp.DstProtAddress) != 4 {
+		return false
+	}
+	// ip := net.IPv4(arp.DstProtAddress[0], arp.DstProtAddress[1], arp.DstProtAddress[2], arp.DstProtAddress[3])
+	// return ip.String() == proxyTarget
+	return true
+}
+
+func isicmpv6sol(packet gopacket.Packet) bool {
+	ipv6Layer := packet.Layer(layers.LayerTypeIPv6)
+	if ipv6Layer == nil {
+		return false
+	}
+	_, ok := ipv6Layer.(*layers.IPv6)
+	if !ok {
+		return false
+	}
+
+	// Check if the packet contains an ICMPv6 layer
+	icmpv6Layer := packet.Layer(layers.LayerTypeICMPv6)
+	if icmpv6Layer == nil {
+		return false
+	}
+
+	icmpv6, ok := icmpv6Layer.(*layers.ICMPv6)
+	if !ok {
+		return false
+	}
+
+	return icmpv6.TypeCode.Type() == layers.ICMPv6TypeRouterSolicitation
 }
