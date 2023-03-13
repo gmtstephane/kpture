@@ -57,7 +57,7 @@ func SetupProxy(h KubeProxyHandler, opts ProxyOpts) (string, error) {
 
 func TearDownProxy(id string, h KubeProxyHandler) error {
 	err := h.Delete(context.Background(), "kpture-proxy-"+id, metav1.DeleteOptions{})
-	if err != nil && errors.IsNotFound(err) {
+	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
 	return nil
