@@ -41,7 +41,7 @@ brews:
           owner: gmtstephane
 
           # Repository name. (templateable)
-          name: kpture
+          name: homebrew-kpture
 
           # Optionally a branch can be provided. (templateable)
           #
