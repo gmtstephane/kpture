@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -13,7 +14,7 @@ import (
 )
 
 const (
-	defaultPolling = 300 * time.Millisecond
+	defaultPolling = 1 * time.Second
 )
 
 type KubeEphemeralHandler interface {
@@ -23,93 +24,22 @@ type KubeEphemeralHandler interface {
 }
 
 func SetupEphemeralContainers(pods []v1.Pod, h KubeEphemeralHandler, opts AgentOpts) error {
-	wg := sync.WaitGroup{}
 	errchan := make(chan error, len(pods))
+
+	// create the debug container in all the pods
+	// the wait group is done when all kubernetes api calls are done
+	// not when the debug containers are actually running
+	wg := sync.WaitGroup{}
 	wg.Add(len(pods))
-
-	readychan := make(chan bool, len(pods))
-	c := 0
-	go func() {
-		for {
-			<-readychan
-			c++
-			// log.Printf("Debug container ready %d/%d", c, len(pods))
-		}
-	}()
-
 	for _, kpturePod := range pods {
 		n := kpturePod
 		go func() {
 			createDebugContainer(n, errchan, &wg, h, opts)
-			readychan <- true
 		}()
 	}
-
-	// // wait for the debug container to be ready by polling because watch is not implemented for ephemeral containers
-	// ctx, cancel := context.WithTimeout(context.Background(), opts.SetupTimeout)
-	// defer cancel()
-	// for {
-	// 	select {
-	// 	case <-ctx.Done():
-	// 		errchan <- errors.New("timeout waiting for debug container to be ready")
-	// 		return
-	// 	default:
-	// 		pod, errGetPod := h.Get(context.Background(), pod.Name, metav1.GetOptions{})
-	// 		if errGetPod != nil {
-	// 			errchan <- errGetPod
-	// 			return
-	// 		}
-	// 		for _, eph := range pod.Status.EphemeralContainerStatuses {
-	// 			if eph.Name == "kpture-"+opts.UUID {
-	// 				if eph.State.Running != nil {
-	// 					// log.Println("debug container is Running for pod", pod.Name)
-	// 					return
-	// 				} else if eph.State.Terminated != nil {
-	// 					errchan <- errors.New("Error while setting up container : " + eph.State.Terminated.Message)
-	// 				}
-	// 			}
-	// 		}
-	// 		time.Sleep(defaultPolling)
-	// 	}
-	// }
-
 	wg.Wait()
 
-	// Start a watcher
-	go func() {
-		for {
-			list, err := h.List(context.Background(), metav1.ListOptions{})
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			c := 0
-			for _, pod := range list.Items {
-				if isPodInArray(pod.Name, pods) {
-					for _, eph := range pod.Status.EphemeralContainerStatuses {
-						if eph.Name == "kpture-"+opts.UUID {
-							if eph.State.Running != nil {
-								c++
-								break
-							}
-							if eph.State.Terminated != nil {
-								log.Println("error setting pod " + eph.State.Terminated.Message)
-								return
-							}
-						}
-					}
-				}
-			}
-			if c == len(pods) {
-				log.Println("kubernetes reported all debug pods ready")
-				return
-			}
-			time.Sleep(2 * time.Second)
-		}
-	}()
-
-	// w.PersistWith(spin.Spinner{}, fmt.Sprintf("Created debug container %d/%d", len(pods), len(pods)))
-	// log.Println("All debug containers are ready")
+	// If we have any error creating containers we return the first one
 	for len(errchan) > 0 {
 		err := <-errchan
 		if err != nil {
@@ -117,7 +47,54 @@ func SetupEphemeralContainers(pods []v1.Pod, h KubeEphemeralHandler, opts AgentO
 			return err
 		}
 	}
+
+	// Readyness and Liveness probes are not supported for ephemeral containers
+	// Kubernetes is quiet long to detect containers as running.
+	// Start a watcher in case an ephemeral container fails to start
+	go watcher(h, pods, opts)
+
 	return nil
+}
+
+// watcher checks all the pods until they are all in a running state
+// or until one of them is in a terminated state for an error.
+func watcher(h KubeEphemeralHandler, pods []v1.Pod, opts AgentOpts) {
+	for {
+		list, err := h.List(context.Background(), metav1.ListOptions{})
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		countPod := 0
+		for _, pod := range list.Items {
+			if isPodInArray(pod.Name, pods) {
+				var errStatus error
+				if countPod, errStatus = checkpodStatus(pod, opts, countPod); errStatus != nil {
+					log.Println(errStatus)
+					return
+				}
+			}
+		}
+		if countPod == len(pods) {
+			return
+		}
+		time.Sleep(defaultPolling)
+	}
+}
+
+func checkpodStatus(pod v1.Pod, opts AgentOpts, countPod int) (int, error) {
+	for _, eph := range pod.Status.EphemeralContainerStatuses {
+		if eph.Name == "kpture-"+opts.UUID {
+			if eph.State.Running != nil {
+				countPod++
+				break
+			}
+			if eph.State.Terminated != nil {
+				return 0, errors.New("error setting pod " + eph.State.Terminated.Message)
+			}
+		}
+	}
+	return countPod, nil
 }
 
 func createDebugContainer(pod v1.Pod, errchan chan error, wg *sync.WaitGroup, h KubeEphemeralHandler, opts AgentOpts) {
@@ -130,16 +107,18 @@ func createDebugContainer(pod v1.Pod, errchan chan error, wg *sync.WaitGroup, h 
 }
 
 func injectContainer(pod v1.Pod, h KubeEphemeralHandler, opts AgentOpts, id string) error {
-	// get the pod to make sure we have the latest version
+	// get the pod again to make sure we have the latest version
 	// otherwise we might get a conflict error
 	syncpod, err := h.Get(context.Background(), pod.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
 
-	debugContainer := debugPod(syncpod, "kpture-"+id, opts)
-	_, err = h.UpdateEphemeralContainers(context.Background(), pod.Name, debugContainer, metav1.UpdateOptions{})
-	if err != nil {
+	if _, err = h.UpdateEphemeralContainers(
+		context.Background(),
+		pod.Name,
+		debugPod(syncpod, "kpture-"+id, opts),
+		metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 
@@ -154,9 +133,20 @@ func debugPod(pod *v1.Pod, name string, opts AgentOpts) *v1.Pod {
 		fmt.Sprintf("-l%d", opts.SnapshotLen),
 		fmt.Sprintf("-p%d", opts.TargetPort),
 	}
+	p := true
+	f := false
+
 	ec := &v1.EphemeralContainer{
 		EphemeralContainerCommon: v1.EphemeralContainerCommon{
-			Name:            name,
+			Name: name,
+			SecurityContext: &v1.SecurityContext{
+				Capabilities: &v1.Capabilities{
+					Add: []v1.Capability{"NET_ADMIN", "NET_RAW"},
+				},
+				RunAsNonRoot:             &p,
+				Privileged:               &f,
+				AllowPrivilegeEscalation: &f,
+			},
 			Args:            args,
 			Image:           "ghcr.io/gmtstephane/kpture:latest",
 			ImagePullPolicy: v1.PullIfNotPresent,

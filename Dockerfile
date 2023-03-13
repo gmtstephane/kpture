@@ -1,16 +1,23 @@
-FROM golang:1.19-alpine as base
+FROM golang:1.20-alpine as base
 
 ARG BUILDTAG
-RUN apk update
-RUN apk add build-base 
-RUN if [ "$BUILDTAG" = "agent" ]; then apk add libpcap-dev libpcap; fi
+ARG UID=1000
+ARG GID=1000
+
+RUN apk update && \
+  apk add --no-cache build-base shadow && \
+  groupadd -g $GID appgroup && \
+  useradd -u $UID -g $GID -s /bin/sh -m kpture
+
+RUN if [ "$BUILDTAG" = "agent" ]; then apk add libpcap-dev libpcap libcap; fi
 
 COPY . /app/service
 WORKDIR /app/service
-# Build the Go app
 RUN go build --tags $BUILDTAG -a -ldflags "-linkmode external -extldflags '-static' -s -w" -o /app/service/kpture .
+RUN if [ "$BUILDTAG" = "agent" ]; then setcap 'cap_net_raw+ep' /app/service/kpture; fi
 
 FROM scratch
-# Copy our static executable.
-COPY --from=base /app/service/kpture /kpture
+USER kpture:appgroup
+COPY --from=base /etc/passwd /etc/group /etc/
+COPY --from=base --chown=kpture:appgroup /app/service/kpture /kpture
 ENTRYPOINT ["/kpture"]

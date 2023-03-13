@@ -1,5 +1,5 @@
-//go:build agent
-// +build agent
+//go:build agent || all
+// +build agent all
 
 /*
 Copyright © 2023 Stephane Guillemot <gmtstephane@gmail.com>
@@ -40,6 +40,9 @@ const (
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "start agent probe to capture packets",
+	Long: `
+	Lon description example 
+	`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		t, err := utils.NewTerminationWriter(enableTermMessagePath, termMessagePath)
@@ -92,10 +95,7 @@ var agentCmd = &cobra.Command{
 
 		for {
 			select {
-			case stop := <-stopchan:
-				if stop != nil {
-					return t.TerminationMessage(err)
-				}
+			case <-stopchan:
 				return nil
 
 			case packet := <-packetSource.Packets():

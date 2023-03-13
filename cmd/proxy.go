@@ -1,5 +1,5 @@
-//go:build proxy
-// +build proxy
+//go:build proxy || all
+// +build proxy all
 
 /*
 Copyright © 2023 Stephane Guillemot <gmtstephane@gmail.com>

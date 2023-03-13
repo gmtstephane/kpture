@@ -1,5 +1,5 @@
-//go:build cli
-// +build cli
+//go:build cli || all
+// +build cli all
 
 /*
 Copyright © 2023 Stephane Guillemot <gmtstephane@gmail.com>
@@ -35,6 +35,10 @@ var packetsCmd = &cobra.Command{
 	Use:   "packets",
 	Short: "capture packet from pods",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if !cmd.Flag("output").Changed && !cmd.Flag("raw").Changed {
+			return errors.New("must provide output and/or raw flag")
+		}
+
 		log.SetFlags(0)
 		log.SetOutput(os.Stderr)
 		client, err := k8s.GetClient(namespace)
@@ -42,15 +46,22 @@ var packetsCmd = &cobra.Command{
 			return err
 		}
 
-		// select the pods to capture
+		// Check if the cluster supports Ephemeral Containers
+		if err = k8s.CheckEphemeralContainerSupport(client.Clientset.Discovery()); err != nil {
+			return err
+		}
+
+		// Select pods based on cli args
 		pods, err := k8s.SelectPods(args, all, client.Clientset.CoreV1().Pods(client.Namespace))
 		if err != nil {
 			return err
 		}
 
-		if !cmd.Flag("output").Changed && !cmd.Flag("raw").Changed {
-			return errors.New("must provide output and/or raw flag")
+		// Check if pods are ready and necessary security context for traffic capture
+		if err = k8s.CheckPodsContext(pods); err != nil {
+			return err
 		}
+
 		kptureID := uuid.New().String()
 
 		agentOpts := k8s.LoadAgentOpts(k8s.WithAgentUUID(kptureID), k8s.WithAgentSnapLen(-1))
@@ -63,14 +74,14 @@ var packetsCmd = &cobra.Command{
 
 		log.Println("Deploying Proxy")
 
+		// cleanup the proxy at the end
+		defer tearDown(client, kptureID)
+
 		ip, err := k8s.SetupProxy(client.Clientset.CoreV1().Pods(client.Namespace), proxyOpts)
 		if err != nil {
 			return err
 		}
 		agentOpts = agentOpts.WithTargetIP(ip).WithTargetPort(int(proxyOpts.ServerPort))
-
-		// cleanup the proxy at the end
-		defer tearDown(client, kptureID)
 
 		// or on interrupt
 		c := make(chan os.Signal, 1)
@@ -321,8 +332,7 @@ func isArp(packet gopacket.Packet) bool {
 	if arp.Operation != layers.ARPRequest || len(arp.DstProtAddress) != 4 {
 		return false
 	}
-	// ip := net.IPv4(arp.DstProtAddress[0], arp.DstProtAddress[1], arp.DstProtAddress[2], arp.DstProtAddress[3])
-	// return ip.String() == proxyTarget
+
 	return true
 }
 

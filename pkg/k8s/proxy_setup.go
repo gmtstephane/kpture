@@ -4,6 +4,7 @@ import (
 	"context"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -55,7 +56,11 @@ func SetupProxy(h KubeProxyHandler, opts ProxyOpts) (string, error) {
 }
 
 func TearDownProxy(id string, h KubeProxyHandler) error {
-	return h.Delete(context.Background(), "kpture-proxy-"+id, metav1.DeleteOptions{})
+	err := h.Delete(context.Background(), "kpture-proxy-"+id, metav1.DeleteOptions{})
+	if err != nil && errors.IsNotFound(err) {
+		return err
+	}
+	return nil
 }
 
 func debugContainer(opts ProxyOpts) v1.Container {

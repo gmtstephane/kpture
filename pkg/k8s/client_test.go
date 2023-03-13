@@ -8,9 +8,59 @@ import (
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/version"
 )
 
-func TestGetClient(t *testing.T) {
+type versionGetterMock struct {
+	Major string
+	Minor string
+	err   error
+}
+
+func (v *versionGetterMock) ServerVersion() (*version.Info, error) {
+	if v.err != nil {
+		return nil, v.err
+	}
+
+	return &version.Info{
+		Major: v.Major,
+		Minor: v.Minor,
+	}, nil
+}
+
+func TestCheckEphemeralContainerSupport(t *testing.T) {
+	versionMock := &versionGetterMock{
+		err: errors.New("Error fetching kubernetes api"),
+	}
+
+	err := CheckEphemeralContainerSupport(versionMock)
+	assert.Error(t, err)
+
+	versionMock.err = nil
+
+	versionMock.Major = "1"
+	versionMock.Minor = "21"
+
+	err = CheckEphemeralContainerSupport(versionMock)
+	assert.Error(t, err)
+
+	versionMock.Major = "1"
+	versionMock.Minor = "23"
+
+	err = CheckEphemeralContainerSupport(versionMock)
+	assert.NoError(t, err)
+
+	versionMock.Major = "azr"
+	versionMock.Minor = "23"
+
+	err = CheckEphemeralContainerSupport(versionMock)
+	assert.Error(t, err)
+
+	versionMock.Major = "1"
+	versionMock.Minor = "qsd"
+
+	err = CheckEphemeralContainerSupport(versionMock)
+	assert.Error(t, err)
 }
 
 type podListerMock struct {
