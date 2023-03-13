@@ -41,7 +41,7 @@ brews:
           owner: gmtstephane
 
           # Repository name. (templateable)
-          name: kpture-brew
+          name: kpture
 
           # Optionally a branch can be provided. (templateable)
           #
@@ -50,7 +50,7 @@ brews:
 
       # Your app's homepage.
       # Default is empty.
-      homepage: "https://github.com/gmtstephane/kpture-brew"
+      homepage: "https://github.com/gmtstephane/kpture"
       # Template of your app's description.
       # Default is empty.
       description: "kubernetes packet capture tool"
