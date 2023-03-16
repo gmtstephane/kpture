@@ -24,13 +24,6 @@ jobs:
         env:
           CC_TEST_REPORTER_ID: 04170e2f85838116d2cdb06a1c808e358ec86e5a03040871361df9cdad443777
         run: ./cc-reporter after-build -t gocov -p github.com/gmtstephane/kpture
-      - name: Run Snyk to check for vulnerabilities
-        uses: snyk/actions/golang@master
-        with:
-          command: monitor
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
       # - run: go build main.go
       # - uses: GoTestTools/gotestfmt-action@v2
       # - name: Create k8s Kind Cluster
