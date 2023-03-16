@@ -27,5 +27,4 @@ dist/
 bin/
 *.pcap
 coverage.txt
-*.yaml
 docs/

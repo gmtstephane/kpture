@@ -1,0 +1,57 @@
+name: "unit-testing"
+on: [pull_request, push]
+
+jobs:
+  kind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v3
+        with:
+          go-version: "1.20.1"
+      - name: Checkout
+        uses: actions/checkout@v3
+      - run: sudo apt update -y && sudo apt-get install -y libpcap-dev
+      - run: go mod tidy
+      - name: Download codeclimate reporter
+        run: wget -O cc-reporter https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 && chmod +x cc-reporter
+      - name: Prepare code coverage
+        run: ./cc-reporter before-build
+      - name: Run unit tests
+        run: go test --tags proxy,cli,agent  -race -coverprofile=c.out -covermode=atomic ./pkg/...
+      - name: Format code coverage
+        run: ./cc-reporter format-coverage c.out -t gocov -p github.com/gmtstephane/kpture
+      - name: Upload code coverage
+        env:
+          CC_TEST_REPORTER_ID: 04170e2f85838116d2cdb06a1c808e358ec86e5a03040871361df9cdad443777
+        run: ./cc-reporter after-build -t gocov -p github.com/gmtstephane/kpture
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/golang@master
+        with:
+          command: monitor
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      # - run: go build main.go
+      # - uses: GoTestTools/gotestfmt-action@v2
+      # - name: Create k8s Kind Cluster
+      #   uses: helm/kind-action@v1.4.0
+      #   with:
+      #     version: v0.17.0
+      #   env:
+      #     KUBECONFIG: /tmp/kubeconfig
+      # - name: Testing
+      #   env:
+      #     KUBECONFIG: /tmp/kubeconfig
+      #   run: |
+      #     kubectl get nodes
+      #     kubectl apply -f test/e2e/pod.yaml
+      #     kubectl apply -f test/e2e/precache.yaml
+      #     kubectl wait pods podsample -n default --for condition=Ready
+      #     kubectl wait pods agent -n default --for condition=Ready
+      #     kubectl wait pods podsample-integration -n default --for condition=Ready
+      #     kubectl config set-context --current --namespace=default
+      # - run: |
+      #     go test -json -timeout 30s ./pkg/kpture -kubeconfig=/tmp/kubeconfig  | gotestfmt
+      #     go test -json -timeout 30s ./test/e2e/... -kubeconfig=/tmp/kubeconfig  | gotestfmt
+      #   env:
+      #     CI: true
