@@ -74,6 +74,7 @@ type AgentOpts struct {
 	TargetIP     string        // proxy endpoint address to send packet via gRPC
 	TargetPort   int           // proxy endpoint port to send packet via gRPC
 	UUID         string        // kpture uuid used in  ephemeral container name
+	Filter       string        // https://www.tcpdump.org/manpages/pcap_compile.3pcap.html
 	SetupTimeout time.Duration // timeout for ephemeral container injection
 }
 
@@ -115,6 +116,12 @@ func WithAgentDevice(n string) AgentOpt {
 func WithAgentPromiscuous(n bool) AgentOpt {
 	return func(o AgentOpts) AgentOpts {
 		o.Promiscuous = n
+		return o
+	}
+}
+func WithAgentCaptureFilter(n string) AgentOpt {
+	return func(o AgentOpts) AgentOpts {
+		o.Filter = n
 		return o
 	}
 }

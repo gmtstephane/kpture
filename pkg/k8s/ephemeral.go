@@ -132,6 +132,7 @@ func debugPod(pod *v1.Pod, name string, opts AgentOpts) *v1.Pod {
 		fmt.Sprintf("-t%s", opts.TargetIP),
 		fmt.Sprintf("-l%d", opts.SnapshotLen),
 		fmt.Sprintf("-p%d", opts.TargetPort),
+		fmt.Sprintf("-f%s", opts.Filter),
 	}
 	p := true
 	f := false
@@ -139,7 +140,6 @@ func debugPod(pod *v1.Pod, name string, opts AgentOpts) *v1.Pod {
 	ec := &v1.EphemeralContainer{
 		EphemeralContainerCommon: v1.EphemeralContainerCommon{
 			Name: name,
-
 			SecurityContext: &v1.SecurityContext{
 				RunAsUser: &user,
 				Capabilities: &v1.Capabilities{
