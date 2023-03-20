@@ -90,7 +90,7 @@ Start a kubernetes packet kpture running these steps:
 
 		kptureID := uuid.New().String()
 
-		agentOpts := k8s.LoadAgentOpts(k8s.WithAgentUUID(kptureID), k8s.WithAgentSnapLen(-1))
+		agentOpts := k8s.LoadAgentOpts(k8s.WithAgentUUID(kptureID), k8s.WithAgentSnapLen(-1), k8s.WithAgentCaptureFilter(capturefilter))
 		proxyOpts := k8s.LoadProxyOpts(k8s.WithProxyUUID(kptureID))
 
 		writer, err := newpcapWriter(cmd, pods, uint32(agentOpts.SnapshotLen))
@@ -203,6 +203,7 @@ func init() {
 	packetsCmd.Flags().BoolVarP(&all, "all", "a", false, "Capture from all pods in the selected namespace")
 	packetsCmd.Flags().BoolVarP(&raw, "raw", "r", false, "Print raw packet to stdout (for tshark/wireshark)")
 	packetsCmd.Flags().StringVarP(&output, "output", "o", "random-kpture-id", "output folder")
+	packetsCmd.Flags().StringVarP(&capturefilter, "filter", "f", "", "capture filter")
 	packetsCmd.Flags().BoolVarP(&split, "split", "s", true, "split pcap files per pod")
 }
 

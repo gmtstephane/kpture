@@ -29,6 +29,7 @@ var (
 	proxyPort             int
 	proxyTarget           string
 	enableTermMessagePath bool
+	filter                string
 	termMessagePath       string
 )
 
@@ -63,6 +64,7 @@ It is meant to be run as a sidecar/ephemeral container in a pod but can be run s
 		if err != nil {
 			return t.TerminationMessage(err)
 		}
+
 		if proxyTarget == "" {
 			return t.TerminationMessage(errors.New("agentProxyTarget not set"))
 		}
@@ -71,7 +73,15 @@ It is meant to be run as a sidecar/ephemeral container in a pod but can be run s
 		if err != nil {
 			return t.TerminationMessage(err)
 		}
-		if err = handle.SetBPFFilter(fmt.Sprintf("port not %d", proxyPort)); err != nil {
+		defer handle.Close()
+
+		defaultfilter := fmt.Sprintf("port not %d", proxyPort)
+		if filter == "" {
+			filter = defaultfilter
+		} else {
+			filter = fmt.Sprintf("%s and %s", filter, defaultfilter)
+		}
+		if err = handle.SetBPFFilter(filter); err != nil {
 			return t.TerminationMessage(err)
 		}
 		target := fmt.Sprintf("%s:%d", proxyTarget, proxyPort)
@@ -142,6 +152,7 @@ func initAgentFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&device, "device", "d", "eth0", "Capture device")
 	cmd.Flags().StringVarP(&proxyTarget, "target", "t", "", "Proxy server address")
 	cmd.Flags().StringVarP(&termMessagePath, "messagePath", "m", utils.DefaultKubePath, "Termination message path")
+	cmd.Flags().StringVarP(&filter, "filter", "f", "", "Capture filter")
 	cmd.Flags().BoolVar(&enableTermMessagePath, "togglemessagePath", true, "Toggle  message path")
 	cmd.Flags().IntVarP(&proxyPort, "port", "p", defaultTargetPort, "Proxy server port")
 }
