@@ -135,11 +135,13 @@ func debugPod(pod *v1.Pod, name string, opts AgentOpts) *v1.Pod {
 	}
 	p := true
 	f := false
-
+	user := int64(1000)
 	ec := &v1.EphemeralContainer{
 		EphemeralContainerCommon: v1.EphemeralContainerCommon{
 			Name: name,
+
 			SecurityContext: &v1.SecurityContext{
+				RunAsUser: &user,
 				Capabilities: &v1.Capabilities{
 					Add: []v1.Capability{"NET_ADMIN", "NET_RAW"},
 				},
