@@ -23,8 +23,7 @@ func SetupProxy(h KubeProxyHandler, opts ProxyOpts) (string, error) {
 	name := "kpture-proxy-" + opts.UUID
 	pod := v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "default",
+			Name: name,
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{

@@ -105,7 +105,7 @@ Start a kubernetes packet kpture running these steps:
 
 		ip, err := k8s.SetupProxy(client.Clientset.CoreV1().Pods(client.Namespace), proxyOpts)
 		if err != nil {
-			return err
+			return errors.New("failed to setup proxy in namespace " + client.Namespace + " : " + err.Error())
 		}
 		agentOpts = agentOpts.WithTargetIP(ip).WithTargetPort(int(proxyOpts.ServerPort))
 
