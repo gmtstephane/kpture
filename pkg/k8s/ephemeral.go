@@ -132,8 +132,11 @@ func debugPod(pod *v1.Pod, name string, opts AgentOpts) *v1.Pod {
 		fmt.Sprintf("-t%s", opts.TargetIP),
 		fmt.Sprintf("-l%d", opts.SnapshotLen),
 		fmt.Sprintf("-p%d", opts.TargetPort),
-		fmt.Sprintf("-f%s", opts.Filter),
 	}
+	if opts.Filter != "" {
+		args = append(args, fmt.Sprintf("-f%s", opts.Filter))
+	}
+
 	p := true
 	f := false
 	user := int64(1000)
