@@ -32,19 +32,11 @@ var (
 	pEnableTermMessagePath bool
 )
 
-var proxyExample = []utils.CommandExample{
-	{
-		Command: "kpture proxy --port=10000 -s=1500",
-		Title:   "Start Kpture proxy server",
-	},
-}
-
 var proxyCmd = &cobra.Command{
 	Use:   "proxy",
 	Short: "Start proxy server",
 	Long: `
-Kpture proxy is a gRPC server that receives packets from agents. It can then be queried by client to retreive them.
-` + utils.CommandMardkown(proxyExample),
+Kpture proxy is a gRPC server that receives packets from agents. It can then be queried by client to retreive them.`,
 	RunE: func(c *cobra.Command, args []string) error {
 		t, err := utils.NewTerminationWriter(pEnableTermMessagePath, pTermMessagePath)
 		if err != nil {

@@ -22,6 +22,7 @@ type Forwarder interface {
 	ForwardPorts() error
 }
 
+// GetKubeForwarder returns a port forwarder for a given pod
 func GetKubeForwarder(
 	r *rest.Config,
 	path string,
