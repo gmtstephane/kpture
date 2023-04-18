@@ -52,6 +52,21 @@ kpture packets nginx-679f748897-vmc5r nginx-6fdt248897-380f4  --raw | tshark -r 
 kpture packets --all -o output --raw | wireshark -k -i -
 ```
 
+### Roadmap
+Here are some features I plan to add to kpture in the near future:
+
+- Documentation: I plan to add more documentation to the project, including a more detailed description of the project.
+- Multi-container interface capture support (multus): Currently, kpture only captures packets from the primary container of a pod. I plan to add support for capturing packets from multiple interfaces.
+- Filter per pod: I plan to add the ability to apply filters to capture only specific packets from a particular pod, based on criteria such as protocol, source/destination IP address, and port numbers. At the moment, a global filter can be applied to all pods using the --filter option.
+- Capture template by YAML config file: I plan to add support for configuring kpture using YAML config files, allowing users to specify and filter the pods to capture, filters to apply, and output format. This will make it easier to manage and reproduce captures with.
+
+
+### Alternative tools
+
+- [kubeshark](https://github.com/kubeshark/kubeshark) is a powerfull tool to debug network issues in your cluster. It is a great tool if you want to debug network issues in your cluster. However, it requires a lot of configuration and is not as easy to use as kpture. It also requires a lot of resources to run. Yet kpture is more simple and lightweight. It handle only the capture part and let you use your favorite tools to analyze the captured packets. Wireshark can anaylse and parse most protocols where kubesark cannot. Kpture is also infrastructure agnostic and does not needs any specific configuration to run.
+
+- [ksniff](https://github.com/eldadru/ksniff) ksniff is a simple tool that allow you to capture traffic from a given pod. It is a great tool if you want to capture packets from a single pod. However, it does not allow you to capture packets from multiple pods at the same time. It retreives the packet stream trought the pod standard output where kpture uses gRPC streams to retrieves packet.
+
 ### Options
 
 ```
