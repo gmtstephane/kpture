@@ -17,12 +17,14 @@ const (
 	defaultPolling = 1 * time.Second
 )
 
+// KubeEphemeralHandler is an interface to handle the kubernetes api calls
 type KubeEphemeralHandler interface {
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.Pod, error)
 	UpdateEphemeralContainers(ctx context.Context, podName string, pod *v1.Pod, opts metav1.UpdateOptions) (*v1.Pod, error)
 	List(ctx context.Context, opts metav1.ListOptions) (*v1.PodList, error)
 }
 
+// SetupEphemeralContainers create the debug container in all the pods
 func SetupEphemeralContainers(pods []v1.Pod, h KubeEphemeralHandler, opts AgentOpts) error {
 	errchan := make(chan error, len(pods))
 
@@ -82,6 +84,7 @@ func watcher(h KubeEphemeralHandler, pods []v1.Pod, opts AgentOpts) {
 	}
 }
 
+// checkpodStatus checks the status of an ephemeral container agent
 func checkpodStatus(pod v1.Pod, opts AgentOpts, countPod int) (int, error) {
 	for _, eph := range pod.Status.EphemeralContainerStatuses {
 		if eph.Name == "kpture-"+opts.UUID {
@@ -97,6 +100,7 @@ func checkpodStatus(pod v1.Pod, opts AgentOpts, countPod int) (int, error) {
 	return countPod, nil
 }
 
+// createDebugContainer creates the debug container in a pod
 func createDebugContainer(pod v1.Pod, errchan chan error, wg *sync.WaitGroup, h KubeEphemeralHandler, opts AgentOpts) {
 	defer wg.Done()
 	err := injectContainer(pod, h, opts, opts.UUID)
@@ -106,6 +110,7 @@ func createDebugContainer(pod v1.Pod, errchan chan error, wg *sync.WaitGroup, h 
 	}
 }
 
+// injectContainer injects the debug container in a pod
 func injectContainer(pod v1.Pod, h KubeEphemeralHandler, opts AgentOpts, id string) error {
 	// get the pod again to make sure we have the latest version
 	// otherwise we might get a conflict error
@@ -125,6 +130,7 @@ func injectContainer(pod v1.Pod, h KubeEphemeralHandler, opts AgentOpts, id stri
 	return nil
 }
 
+// debugPod creates the debug container object
 func debugPod(pod *v1.Pod, name string, opts AgentOpts) *v1.Pod {
 	args := []string{
 		"agent",

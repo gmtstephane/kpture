@@ -38,22 +38,11 @@ const (
 	defaultTargetPort = 10000
 )
 
-var agentExample = []utils.CommandExample{
-	{
-		Command: "kpture agent --target=<proxy server addr>  --port=10000 --device=eth0",
-		Title:   "Start Kpture agent",
-	},
-}
-
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "Start Kpture packet sniffer agent",
-	Long: `
-Kpture agent is a packet sniffer that sends packets to a proxy server.
-
-It is meant to be run as a sidecar/ephemeral container in a pod but can be run standalone.
-
-` + utils.CommandMardkown(agentExample),
+	Long: `Kpture agent is a packet sniffer that sends packets to a proxy server.
+It is meant to be run as a sidecar/ephemeral container in a pod but can be run standalone.`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		t, err := utils.NewTerminationWriter(enableTermMessagePath, termMessagePath)
@@ -69,12 +58,14 @@ It is meant to be run as a sidecar/ephemeral container in a pod but can be run s
 			return t.TerminationMessage(errors.New("agentProxyTarget not set"))
 		}
 
+		// Open device to capture on
 		handle, err := pcap.OpenLive(device, snapLen, false, -1)
 		if err != nil {
 			return t.TerminationMessage(err)
 		}
 		defer handle.Close()
 
+		//Handle filter
 		defaultfilter := fmt.Sprintf("port not %d", proxyPort)
 		if filter == "" {
 			filter = defaultfilter
@@ -84,6 +75,8 @@ It is meant to be run as a sidecar/ephemeral container in a pod but can be run s
 		if err = handle.SetBPFFilter(filter); err != nil {
 			return t.TerminationMessage(err)
 		}
+
+		// Connect to proxy server
 		target := fmt.Sprintf("%s:%d", proxyTarget, proxyPort)
 		conn, err := grpc.Dial(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
@@ -94,6 +87,7 @@ It is meant to be run as a sidecar/ephemeral container in a pod but can be run s
 		cli := capture.NewAgentServiceClient(conn)
 		packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 
+		// Check if proxy server is ready
 		_, err = cli.Ready(context.Background(), &capture.Pod{})
 		if err != nil {
 			return t.TerminationMessage(err)
@@ -118,6 +112,7 @@ It is meant to be run as a sidecar/ephemeral container in a pod but can be run s
 			case <-stopchan:
 				return nil
 
+			// If we receive a packet, we send it to the proxy server
 			case packet := <-packetSource.Packets():
 				err = addPacketClient.Send(&capture.PacketDescriptor{
 					Name: hostname,

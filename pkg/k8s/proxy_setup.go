@@ -19,6 +19,7 @@ type KubeProxyHandler interface {
 	Create(ctx context.Context, pod *v1.Pod, opts metav1.CreateOptions) (*v1.Pod, error)
 }
 
+// SetupProxy create the debug container in all the pods
 func SetupProxy(h KubeProxyHandler, opts ProxyOpts) (string, error) {
 	name := "kpture-proxy-" + opts.UUID
 	pod := v1.Pod{
@@ -27,7 +28,7 @@ func SetupProxy(h KubeProxyHandler, opts ProxyOpts) (string, error) {
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
-				debugContainer(opts),
+				container(opts),
 			},
 		},
 	}
@@ -54,6 +55,7 @@ func SetupProxy(h KubeProxyHandler, opts ProxyOpts) (string, error) {
 	}
 }
 
+// TearDownProxy delete the debug container
 func TearDownProxy(id string, h KubeProxyHandler) error {
 	err := h.Delete(context.Background(), "kpture-proxy-"+id, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
@@ -62,7 +64,8 @@ func TearDownProxy(id string, h KubeProxyHandler) error {
 	return nil
 }
 
-func debugContainer(opts ProxyOpts) v1.Container {
+// container create the container
+func container(opts ProxyOpts) v1.Container {
 	return v1.Container{
 		Name:            "kpture-proxy",
 		ImagePullPolicy: v1.PullIfNotPresent,

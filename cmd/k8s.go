@@ -19,7 +19,6 @@ import (
 	"time"
 
 	capture "github.com/gmtstephane/kpture/api/kpture"
-	"github.com/gmtstephane/kpture/cmd/utils"
 	"github.com/gmtstephane/kpture/pkg/k8s"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -32,34 +31,15 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var packetExample = []utils.CommandExample{
-	{
-		Command: "kpture packets nginx-679f748897-vmc5r nginx-6fdt248897-380f4  -o output",
-		Title:   "Start kpture in separated pcap files",
-		Additionnal: "This will create the following output directory: " +
-			"\n```bash \noutput\n├── nginx-679f748897-vmc5r.pcap\n└── nginx-6fdt248897-380f4.pcap\n```",
-	},
-	{
-		Command: "kpture packets nginx-679f748897-vmc5r nginx-6fdt248897-380f4  --raw | tshark -r -",
-		Title:   "Start kpture and pipe the output to tshark",
-	},
-	{
-		Command: "kpture --all -o output --raw | wireshark -k -i -",
-		Title:   "Start kpture all packet in current namespace to ./output and pipe the output to wireshark",
-	},
-}
-
 var packetsCmd = &cobra.Command{
 	Use:   "packets",
 	Short: "Capture packet from kubernetes pods",
 	Long: `
 Start a kubernetes packet kpture running these steps:
-	
 - Inject ephemeral containers to target pods
 - Create temporary proxy pod
 - Port forwarding proxy pod to local machine
-- Retrieve packet via proxy
-` + utils.CommandMardkown(packetExample),
+- Retrieve packet via proxy`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if !cmd.Flag("output").Changed && !cmd.Flag("raw").Changed {
 			return errors.New("must provide output and/or raw flag")
@@ -134,6 +114,7 @@ Start a kubernetes packet kpture running these steps:
 			return err
 		}
 
+		//Port forward the proxy
 		err = k8s.PortForward(forwarder, readychan, agentOpts.SetupTimeout)
 		if err != nil {
 			return err
@@ -156,6 +137,7 @@ Start a kubernetes packet kpture running these steps:
 
 		cli := capture.NewClientServiceClient(conn)
 
+		// Handle the stream
 		packets, err := cli.GetPackets(context.Background(), &capture.Empty{})
 		if err != nil {
 			return err
@@ -215,6 +197,10 @@ func tearDown(client *k8s.KubeClient, id string) {
 	}
 }
 
+// pcapWriter is a struct that handles the writing of the packets to the pcap file
+// each pod can have its own writer to a different file
+// the additionnalWriters are used to write to the same file as the podMapWriter or to stdout
+// TODO: refactor this in a lib as pkg
 type pcapWriter struct {
 	podMapWriter       map[string]*pcapgo.Writer
 	additionnalWriters []*pcapgo.Writer
@@ -230,6 +216,7 @@ func (p *pcapWriter) cleanup() {
 	}
 }
 
+// WriteCapture writes the capture to the pcap file
 func (p *pcapWriter) WriteCapture(
 	stream capture.ClientService_GetPacketsClient,
 ) error {

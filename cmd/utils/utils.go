@@ -8,24 +8,6 @@ import (
 
 const DefaultKubePath = "/dev/termination-log"
 
-type CommandExample struct {
-	Command     string
-	Title       string
-	Additionnal string
-}
-
-func CommandMardkown(commands []CommandExample) string {
-	ret := "### Examples:\n"
-	for _, c := range commands {
-		ret += fmt.Sprintf("#### %s\n", c.Title)
-		ret += fmt.Sprintf("```bash\n%s\n```\n", c.Command)
-		if c.Additionnal != "" {
-			ret += fmt.Sprintf("%s\n", c.Additionnal)
-		}
-	}
-	return ret
-}
-
 type TerminationWriter struct {
 	messagePath bool
 	writer      io.Writer

@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/util/flowcontrol"
 )
 
+// KubeClient is a wrapper around the kubernetes clientset
 type KubeClient struct {
 	Clientset *kubernetes.Clientset
 	RestConf  *rest.Config
@@ -27,6 +28,7 @@ const (
 	defaultBurst = 80
 )
 
+// GetClient returns a new KubeClient from the KUBECONFIG with a default namespace if none is provided
 func GetClient(namespace string) (*KubeClient, error) {
 	configFiles := strings.Split(os.Getenv("KUBECONFIG"), ":")
 	config := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
@@ -66,6 +68,7 @@ type VersionGetter interface {
 	ServerVersion() (*version.Info, error)
 }
 
+// CheckEphemeralContainerSupport checks if the cluster supports ephemeral containers
 func CheckEphemeralContainerSupport(v VersionGetter) error {
 	version, err := v.ServerVersion()
 	if err != nil {
@@ -92,6 +95,7 @@ type PodLister interface {
 	List(ctx context.Context, opts metav1.ListOptions) (*v1.PodList, error)
 }
 
+// SelectPods select pods from a list of pods or all pods
 func SelectPods(pods []string, all bool, h PodLister) ([]v1.Pod, error) {
 	podList, err := h.List(context.Background(), metav1.ListOptions{})
 	if err != nil {
@@ -109,6 +113,7 @@ func SelectPods(pods []string, all bool, h PodLister) ([]v1.Pod, error) {
 	return resp, nil
 }
 
+// CheckPodsContext check if all pods are in running state
 func CheckPodsContext(pods []v1.Pod) error {
 	// Check if all pod are in running state
 	// Check if all pod have security context thath allow to run as root and capture packets
@@ -120,6 +125,7 @@ func CheckPodsContext(pods []v1.Pod) error {
 	return nil
 }
 
+// isInArray check if a string is in an array of string
 func isInArray(s string, array []string) bool {
 	for _, a := range array {
 		if a == s {
@@ -129,6 +135,7 @@ func isInArray(s string, array []string) bool {
 	return false
 }
 
+// isPodInArray check if a pod is in an array of pod
 func isPodInArray(s string, array []v1.Pod) bool {
 	for _, a := range array {
 		if a.Name == s {

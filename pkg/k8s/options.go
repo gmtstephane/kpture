@@ -15,6 +15,7 @@ const (
 	proxyDefaultSetupTimeout time.Duration = 20 * time.Second
 )
 
+// ProxyOpts are the options for the proxy server
 type ProxyOpts struct {
 	ServerPort   int32
 	UUID         string
@@ -28,6 +29,7 @@ func defaultProxyOpts() ProxyOpts {
 	}
 }
 
+// LoadProxyOpts loads the proxy options
 func LoadProxyOpts(os ...ProxyOpt) ProxyOpts {
 	opts := defaultProxyOpts()
 	for _, o := range os {
@@ -36,6 +38,7 @@ func LoadProxyOpts(os ...ProxyOpt) ProxyOpts {
 	return opts
 }
 
+// WithProxyUUID sets the proxy uuid
 func WithProxyUUID(u string) ProxyOpt {
 	return func(o ProxyOpts) ProxyOpts {
 		o.UUID = u
@@ -43,6 +46,7 @@ func WithProxyUUID(u string) ProxyOpt {
 	}
 }
 
+// WithProxySetupTimeout sets the proxy setup timeout
 func WithProxySetupTimeout(u time.Duration) ProxyOpt {
 	return func(o ProxyOpts) ProxyOpts {
 		o.SetupTimeout = u
@@ -50,6 +54,7 @@ func WithProxySetupTimeout(u time.Duration) ProxyOpt {
 	}
 }
 
+// WithProxyServerPort sets the proxy server port
 func WithProxyServerPort(u int32) ProxyOpt {
 	return func(o ProxyOpts) ProxyOpts {
 		o.ServerPort = u
@@ -66,6 +71,7 @@ const (
 	agentDefaultSetupTimeout time.Duration = 20 * time.Second
 )
 
+// AgentOpts are the options for the capture agent
 type AgentOpts struct {
 	SnapshotLen  int32         // https://www.tcpdump.org/manpages/pcap_set_snaplen.3pcap.html
 	Promiscuous  bool          // https://www.tcpdump.org/manpages/pcap_set_promisc.3pcap.html
@@ -96,16 +102,19 @@ func LoadAgentOpts(os ...AgentOpt) AgentOpts {
 	return opts
 }
 
+// WithTargetIP sets the target IP
 func (a AgentOpts) WithTargetIP(s string) AgentOpts {
 	a.TargetIP = s
 	return a
 }
 
+// WithTargetPort sets the target port
 func (a AgentOpts) WithTargetPort(p int) AgentOpts {
 	a.TargetPort = p
 	return a
 }
 
+// WithAgentDevice sets the device to capture on
 func WithAgentDevice(n string) AgentOpt {
 	return func(o AgentOpts) AgentOpts {
 		o.Device = n
@@ -113,12 +122,15 @@ func WithAgentDevice(n string) AgentOpt {
 	}
 }
 
+// WithAgentPromiscuous sets the promiscuous mode
 func WithAgentPromiscuous(n bool) AgentOpt {
 	return func(o AgentOpts) AgentOpts {
 		o.Promiscuous = n
 		return o
 	}
 }
+
+// WithAgentCaptureFilter sets the capture filter
 func WithAgentCaptureFilter(n string) AgentOpt {
 	return func(o AgentOpts) AgentOpts {
 		o.Filter = n
@@ -126,6 +138,7 @@ func WithAgentCaptureFilter(n string) AgentOpt {
 	}
 }
 
+// WithAgentSnapLen sets the snapshot length
 func WithAgentSnapLen(n int32) AgentOpt {
 	return func(o AgentOpts) AgentOpts {
 		o.SnapshotLen = n
@@ -133,6 +146,7 @@ func WithAgentSnapLen(n int32) AgentOpt {
 	}
 }
 
+// WithAgentCaptureTimeOut sets the capture timeout
 func WithAgentCaptureTimeOut(n time.Duration) AgentOpt {
 	return func(o AgentOpts) AgentOpts {
 		o.Timeout = n
@@ -140,6 +154,7 @@ func WithAgentCaptureTimeOut(n time.Duration) AgentOpt {
 	}
 }
 
+// WithAgentSetupTimeOut sets the agent setup timeout
 func WithAgentSetupTimeOut(n time.Duration) AgentOpt {
 	return func(o AgentOpts) AgentOpts {
 		o.SetupTimeout = n
@@ -147,6 +162,7 @@ func WithAgentSetupTimeOut(n time.Duration) AgentOpt {
 	}
 }
 
+// WithAgentUUID sets the agent uuid
 func WithAgentUUID(u string) AgentOpt {
 	return func(o AgentOpts) AgentOpts {
 		o.UUID = u
